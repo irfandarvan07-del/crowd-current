@@ -83,10 +83,10 @@ crowd_current_code/
 
 | Room / Component | ESP32 RX Pin (from Uno TX via 1k/2k divider) | ESP32 TX Pin (to Uno RX direct) | Relay Pin (Active LOW) |
 |---|---|---|---|
-| **Room 1** | **GPIO 4** | **GPIO 5** | Relay IN1 → **GPIO 10** (Fan 1) |
-| **Room 2** | **GPIO 6** | **GPIO 7** | Relay IN2 → **GPIO 11** (Fan 2) |
-| **Room 3** | **GPIO 15** | **GPIO 16** | Relay IN3 → **GPIO 12** (Fan 3) |
-| **Building Aux Siren** | — | — | Relay IN4 → **GPIO 13** (Siren/Strobe) |
+| **Room 1** | **GPIO 4** | **GPIO 5** | Relay IN1 → **GPIO 17** (Fan 1) |
+| **Room 2** | **GPIO 6** | **GPIO 7** | Relay IN2 → **GPIO 18** (Fan 2) |
+| **Room 3** | **GPIO 15** | **GPIO 16** | Relay IN3 → **GPIO 8** (Fan 3) |
+| **Building Aux Siren** | — | — | Relay IN4 → **GPIO 9** (Siren/Strobe) |
 
 * **Arduino IDE Settings for ESP32-S3**:
   - Board: **ESP32S3 Dev Module**

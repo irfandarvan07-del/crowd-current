@@ -15,8 +15,8 @@ const int NR = 3;
 HardwareSerial* U[NR] = {&Serial1, &Serial2, &Serial0};
 const int RX_PIN[NR] = {4, 6, 15};     // <- Uno TX through 1k + 2k divider (5 V -> 3.3 V!)
 const int TX_PIN[NR] = {5, 7, 16};     // -> Uno RX (3.3 V is enough for an Uno)
-const int PIN_FAN[NR] = {10, 11, 12};  // 4-ch relay IN1..IN3 (12 V fans)
-const int PIN_AUX = 13;                // IN4: siren/beacon when ANY room is in ALARM
+const int PIN_FAN[NR] = {17, 18, 8};  // 4-ch relay IN1..IN3 (12 V fans) - avoids SPI flash pin 10
+const int PIN_AUX = 9;                // IN4: siren/beacon when ANY room is in ALARM
 const bool RELAY_ACTIVE_LOW = true;
 const unsigned long UNO_STALE_MS = 3000, PC_STALE_MS = 5000, FAN_HOLD_MS = 30000;
 
