@@ -1,27 +1,35 @@
 /*
-  Crowd Current - ROOM NODE (Arduino Uno), one per room.  Set NODE_ID = 1, 2, 3 before upload.
-  Sensors : MQ-2 (analog), DHT11, flame (digital, LOW = flame)    Outputs: buzzer, LED strip
-  Link    : hardware UART (pins 0/1) to the ESP32 hub @ 38400.
-            Uno TX -> divider (1k + 2k) -> ESP32 RX.   ESP32 TX -> Uno RX directly.
-            *** UNPLUG the D0/D1 wires while uploading from USB ***
-  Libraries: Adafruit NeoPixel, DHT sensor library (Adafruit) + Adafruit Unified Sensor
+  Crowd Current - ROOM NODE (Arduino Uno), one per room.
+  Set NODE_ID = 1, 2, or 3 before uploading to each respective room.
 
-  Fusion runs HERE, so the room alarms by itself even if the hub or laptop is dead.
-  Uno -> hub every 0.5 s : $U,id,lvl,fault,ratio*100,temp,hum,flame*HH
-  hub -> Uno every 0.5 s : $K,strip_mode,buzzer_mode,reset*HH      (HH = XOR checksum, hex)
+  Sensors : MQ-2 (analog A0), DHT11 (digital D3), Flame (digital D2, LOW = flame)
+  Outputs : Buzzer (D4), 6 Red LEDs in series via N-channel MOSFET (PWM D6)
+  Link    : Hardware UART (pins D0/D1) to the ESP32 Hub @ 38400 baud.
+            Uno TX (D1) -> Voltage Divider (1k + 2k) -> ESP32 RX
+            ESP32 TX    -> Uno RX (D0) direct
+            *** UNPLUG the D0/D1 wires while uploading via USB ***
+
+  Libraries: DHT sensor library (Adafruit) + Adafruit Unified Sensor
+             (No NeoPixel library needed - MOSFET driven directly via Pin 6)
+
+  Fusion runs HERE, so the room alarms autonomously even if the hub or laptop disconnects:
+    Uno -> hub every 0.5 s : $U,id,lvl,fault,ratio*100,temp,hum,flame*HH
+    hub -> Uno every 0.5 s : $K,strip_mode,buzzer_mode,reset*HH   (HH = XOR checksum, hex)
 */
 #include <DHT.h>
-#include <Adafruit_NeoPixel.h>
 
+// Set to 1 for Room 1, 2 for Room 2, 3 for Room 3
 #define NODE_ID 1
 
 // ===================== PINS (5 V logic, sensors wired directly) =========
-const uint8_t PIN_MQ2 = A0, PIN_FLAME = 2, PIN_DHT = 3, PIN_BUZ = 4, PIN_STRIP = 6;
-const uint8_t STRIP_LEDS = 12;
-const uint8_t FALLBACK = 1;          // arrow shown if hub link is lost during hazard (1 fwd, 2 rev, 0 none)
+const uint8_t PIN_MQ2    = A0;  // MQ-2 Analog Out (0-5V direct)
+const uint8_t PIN_FLAME  = 2;   // Flame Sensor Digital Out (active LOW)
+const uint8_t PIN_DHT    = 3;   // DHT11 1-wire data
+const uint8_t PIN_BUZ    = 4;   // Active Buzzer (via NPN or direct)
+const uint8_t PIN_MOSFET = 6;   // Gate of N-channel MOSFET driving 6 Red LEDs in series
 
 // ===================== THRESHOLDS =======================================
-const unsigned long MQ2_WARMUP_MS = 60000;      // demo; real MQ-2 wants minutes
+const unsigned long MQ2_WARMUP_MS = 60000;      // demo; real MQ-2 wants 1-2 minutes
 const float GAS_WARN = 1.35f, GAS_ALARM = 1.9f, GAS_CLEAR = 1.20f;     // x clean-air baseline
 const float T_WARN = 40, T_ALARM = 50, T_RISE_WARN = 3, T_RISE_ALARM = 6;   // C, C per ~20 s
 
@@ -35,7 +43,6 @@ struct Level {                                   // debounced level with hystere
 } gasL, tmpL, flmL;
 
 DHT dht(PIN_DHT, DHT11);
-Adafruit_NeoPixel strip(STRIP_LEDS, PIN_STRIP, NEO_GRB + NEO_KHZ800);
 
 float ema = 0, base = 0, ratio = 1, temp = NAN, hum = NAN, hist[10];
 uint8_t histN = 0, level = 0;
@@ -89,28 +96,30 @@ void updateBuzzer(uint8_t laptopMode) {
   digitalWrite(PIN_BUZ, (m == 1) ? (t % 1000) < 150 : (m == 2) ? (t % 300) < 150 : false);
 }
 
-// modes: 0 idle, 1 fwd green, 2 rev green, 3 blocked red, 4 fwd amber, 5 rev amber
-void renderStrip(uint8_t mode) {
+/*
+  LED Modes for 6 Red LEDs in series via MOSFET (Pin 6):
+    0: IDLE / Normal        -> OFF
+    1 or 2: EVACUATION PATH -> Solid ON (bright illumination for safe exit route)
+    3: BLOCKED / HAZARD     -> Fast Emergency Strobe (~4 Hz flash, DANGER DO NOT ENTER)
+    4 or 5: ADVISORY ROUTE  -> Medium Warning Blink (1 Hz caution pulse)
+*/
+void renderLeds(uint8_t mode) {
   unsigned long t = millis();
-  uint8_t R = 0, G = 0;
-  if (mode == 1 || mode == 2) G = 255;
-  if (mode == 4 || mode == 5) { R = 255; G = 110; }
-  strip.clear();
   if (mode == 0) {
-    uint8_t b = 8 + (uint8_t)(10 * (1 + sin(t / 700.0)));
-    for (uint8_t p = 0; p < STRIP_LEDS; p++) strip.setPixelColor(p, 0, 0, b);
+    // Normal / Idle: Off
+    digitalWrite(PIN_MOSFET, LOW);
   } else if (mode == 3) {
-    if ((t / 250) % 2) for (uint8_t p = 0; p < STRIP_LEDS; p++) strip.setPixelColor(p, 255, 0, 0);
+    // BLOCKED / HAZARD: rapid emergency strobe (120ms ON / 120ms OFF)
+    digitalWrite(PIN_MOSFET, ((t / 120) % 2) ? HIGH : LOW);
+  } else if (mode == 1 || mode == 2) {
+    // ACTIVE EVACUATION ROUTE: solid ON to illuminate exit corridor
+    digitalWrite(PIN_MOSFET, HIGH);
+  } else if (mode == 4 || mode == 5) {
+    // ADVISORY / CAUTION: 1 Hz blink (500ms ON / 500ms OFF)
+    digitalWrite(PIN_MOSFET, ((t / 500) % 2) ? HIGH : LOW);
   } else {
-    bool fwd = (mode == 1 || mode == 4);
-    uint8_t pos = (t / ((mode >= 4) ? 140 : 70)) % 4;
-    for (uint8_t p = 0; p < STRIP_LEDS; p++) {
-      uint8_t d = fwd ? (p + 4 - pos) % 4 : (pos + 4 - (p % 4)) % 4;
-      uint8_t sc = (d == 0) ? 255 : (d == 1 ? 90 : (d == 2 ? 25 : 0));
-      strip.setPixelColor(p, (R * sc) / 255, (G * sc) / 255, 0);
-    }
+    digitalWrite(PIN_MOSFET, LOW);
   }
-  strip.show();
 }
 
 // ===================== UART LINK ========================================
@@ -127,6 +136,7 @@ void parseLine() {                                 // "$K,strip,buz,reset*HH"
   if (sscanf(rx + 2, ",%d,%d,%d", &a, &b, &c) != 3) return;
   cStrip = a; cBuz = b; cReset = c; lastCmdMs = millis();
 }
+
 void readLink() {
   while (Serial.available()) {
     char c = Serial.read();
@@ -134,6 +144,7 @@ void readLink() {
     else if (c != '\r') { if (rxN < sizeof(rx) - 1) rx[rxN++] = c; else rxN = 0; }
   }
 }
+
 void sendTelemetry() {
   char buf[40];
   snprintf(buf, sizeof(buf), "U,%d,%d,%d,%d,%d,%d,%d", NODE_ID, level, fault, (int)(ratio * 100),
@@ -147,9 +158,19 @@ void sendTelemetry() {
 // ===================== SETUP / LOOP =====================================
 void setup() {
   Serial.begin(38400);
-  pinMode(PIN_FLAME, INPUT); pinMode(PIN_BUZ, OUTPUT); digitalWrite(PIN_BUZ, LOW);
-  dht.begin(); strip.begin(); strip.show();
-  renderStrip(1); digitalWrite(PIN_BUZ, HIGH); delay(150); digitalWrite(PIN_BUZ, LOW);   // self-test
+  pinMode(PIN_FLAME, INPUT);
+  pinMode(PIN_BUZ, OUTPUT);
+  digitalWrite(PIN_BUZ, LOW);
+  pinMode(PIN_MOSFET, OUTPUT);
+  digitalWrite(PIN_MOSFET, LOW);
+  dht.begin();
+
+  // Self-test at boot: pulse LEDs and beep buzzer once for 200 ms
+  digitalWrite(PIN_MOSFET, HIGH);
+  digitalWrite(PIN_BUZ, HIGH);
+  delay(200);
+  digitalWrite(PIN_MOSFET, LOW);
+  digitalWrite(PIN_BUZ, LOW);
 }
 
 void loop() {
@@ -165,10 +186,17 @@ void loop() {
   if (now - tLed >= 40) {
     tLed = now;
     uint8_t m;
-    if (online) m = cStrip;
-    else if (level >= 1 && FALLBACK) m = FALLBACK + (level == 2 ? 0 : 3);   // green (alarm) / amber (warning)
-    else m = 0;
-    renderStrip(m);
+    if (online) {
+      m = cStrip;
+    } else if (level == 2) {
+      m = 3;  // local ALARM fallback: rapid strobe
+    } else if (level == 1) {
+      m = 4;  // local WARNING fallback: caution blink
+    } else {
+      m = 0;  // normal idle: OFF
+    }
+    renderLeds(m);
   }
+
   if (now - tTx >= 500) { tTx = now; sendTelemetry(); }
 }

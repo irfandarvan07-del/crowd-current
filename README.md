@@ -5,7 +5,7 @@
  Room 2 Uno ──┼── Hardware UART ──► ESP32-S3 HUB ── USB CDC (115200) ──► Laptop Controller (Python)
  Room 3 Uno ──┘   (38400 baud)      Relays 1-4 (Fans + Siren)             Vision counting + Dijkstra HUD
 (Sensors, Buzzer,
- WS2812B Strip)
+ 6 Red LEDs / MOSFET)
 ```
 
 ## System Architecture
@@ -13,7 +13,7 @@
 1. **Room Nodes (×3 Arduino Uno)**:
    - One Uno per room (Room 1, Room 2, Room 3).
    - Reads 5V sensors: **MQ-2 Smoke/Gas (A0)**, **Flame Sensor (D2)**, **DHT11 Temperature & Humidity (D3)**.
-   - Actuators: **Active Buzzer (D4)** and **WS2812B NeoPixel Strip (D6)**.
+   - Actuators: **Active Buzzer (D4)** and **6 Red LEDs in series driven via N-channel MOSFET (PWM D6)**.
    - Autonomous multi-sensor fusion: evaluates hazard state locally (`NORMAL`, `WARNING`, `ALARM`) so the room alarms autonomously even if the hub or laptop disconnects.
    - Communicates with ESP32-S3 Hub over hardware UART (`D0`/`D1`) @ 38400 baud.
 
@@ -50,14 +50,14 @@ crowd_current_code/
         ├── hub_esp32/
         │   └── hub_esp32.ino  # ESP32-S3 Hub: 3 UARTs to Unos, 4 Relays, USB to Laptop
         └── room_uno/
-            └── room_uno.ino   # Arduino Uno Room Node: MQ2, Flame, DHT11, Buzzer, WS2812B
+            └── room_uno.ino   # Arduino Uno Room Node: MQ2, Flame, DHT11, Buzzer, 6 Red LEDs + MOSFET
 ```
 
 ---
 
 ## Wiring Guide
 
-### 1. Room Uno Wiring (Each Room - 5V Logic, No Dividers on Sensors)
+### 1. Room Uno Wiring (Each Room - 5V Logic)
 
 | Sensor / Actuator | Arduino Uno Pin | Notes |
 |---|---|---|
@@ -65,15 +65,21 @@ crowd_current_code/
 | **Flame Sensor DO** | **D2** | Digital output (Active LOW on flame) |
 | **DHT11 DATA** | **D3** | Bidirectional 1-wire data |
 | **Active Buzzer** | **D4** | Active HIGH (via NPN transistor or direct) |
-| **WS2812B Strip DIN** | **D6** | In series with 330 Ω resistor |
+| **MOSFET Gate (6 Red LEDs)** | **D6** | **N-channel MOSFET** (e.g. IRF520 / IRLZ44N / 2N7000):<br>• Uno D6 → 100–220 Ω gate resistor → MOSFET Gate<br>• 10k Ω pulldown resistor from Gate to GND<br>• MOSFET Source → GND<br>• MOSFET Drain → Cathode of 6 series LEDs<br>• Anode of 6 series LEDs → +12V (via current-limiting resistor) |
 | **Link to Hub: Uno TX** | **D1** | **Must use voltage divider to ESP32 RX**:<br>`Uno D1` → 1kΩ resistor → `ESP32 RX`<br>Connect 2kΩ resistor from `ESP32 RX` to `GND`. |
 | **Link to Hub: Uno RX** | **D0** | Directly connected to ESP32 TX (3.3V logic is HIGH for Uno) |
-| **GND** | **GND** | Common ground connected across all Unos, ESP32, and power supplies |
+| **GND** | **GND** | Common ground connected across all Unos, ESP32, MOSFET sources, and supplies |
 
 > [!IMPORTANT]
 > **Disconnect pins D0 & D1 when uploading firmware via USB to the Arduino Uno** (as D0/D1 are shared with the Uno's USB-to-UART chip). Reconnect after uploading.
 
-### 2. ESP32-S3 Hub Wiring
+### 2. LED Behavior Modes (6 Red LEDs via MOSFET)
+- **Mode 0 (Normal / Idle)**: **OFF** (standby state).
+- **Mode 1 / 2 (Active Evacuation Route)**: **Solid Bright ON** (illuminates the safe evacuation path out of the room).
+- **Mode 3 (Blocked / Fire Hazard)**: **Rapid Emergency Strobe (~4 Hz)** (fast strobe alerting occupants of immediate hazard / do not enter).
+- **Mode 4 / 5 (Advisory / Caution)**: **Medium Warning Blink (1 Hz)** (slow caution flash for detours).
+
+### 3. ESP32-S3 Hub Wiring
 
 | Room / Component | ESP32 RX Pin (from Uno TX via 1k/2k divider) | ESP32 TX Pin (to Uno RX direct) | Relay Pin (Active LOW) |
 |---|---|---|---|
@@ -92,9 +98,9 @@ crowd_current_code/
 
 ### 1. Flash Arduino Unos (`firmware/room_uno/room_uno.ino`)
 1. Open `room_uno.ino` in Arduino IDE.
-2. For Room 1: ensure line 16 has `#define NODE_ID 1`. Upload to Uno 1.
-3. For Room 2: change line 16 to `#define NODE_ID 2`. Upload to Uno 2.
-4. For Room 3: change line 16 to `#define NODE_ID 3`. Upload to Uno 3.
+2. For Room 1: ensure line 22 has `#define NODE_ID 1`. Upload to Uno 1.
+3. For Room 2: change line 22 to `#define NODE_ID 2`. Upload to Uno 2.
+4. For Room 3: change line 22 to `#define NODE_ID 3`. Upload to Uno 3.
 
 ### 2. Flash ESP32-S3 Hub (`firmware/hub_esp32/hub_esp32.ino`)
 1. Open `hub_esp32.ino` in Arduino IDE.
