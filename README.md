@@ -2,8 +2,8 @@
 
 ```
  Room 1 Uno ──┐
- Room 2 Uno ──┼── Hardware UART ──► ESP32-S3 HUB ── USB CDC (115200) ──► Laptop Controller (Python)
- Room 3 Uno ──┘   (38400 baud)      Relays 1-4 (Fans + Siren)             Vision counting + Dijkstra HUD
+ Room 2 Uno ──┼── Hardware/Software UART ──► ESP32 DevKit HUB ── USB (115200) ──► Laptop Controller (Python)
+ Room 3 Uno ──┘   (38400 baud)                 Relays 1-4 (Fans + Siren)             Vision counting + Dijkstra HUD
 (Sensors, Buzzer,
  6 Red LEDs / MOSFET)
 ```
@@ -15,14 +15,14 @@
    - Reads 5V sensors: **MQ-2 Smoke/Gas (A0)**, **Flame Sensor (D2)**, **DHT11 Temperature & Humidity (D3)**.
    - Actuators: **Active Buzzer (D4)** and **6 Red LEDs in series driven via N-channel MOSFET (PWM D6)**.
    - Autonomous multi-sensor fusion: evaluates hazard state locally (`NORMAL`, `WARNING`, `ALARM`) so the room alarms autonomously even if the hub or laptop disconnects.
-   - Communicates with ESP32-S3 Hub over hardware UART (`D0`/`D1`) @ 38400 baud.
+   - Communicates with ESP32 DevKit Hub over UART (`D0`/`D1`) @ 38400 baud.
 
-2. **Hub (ESP32-S3)**:
-   - 3 dedicated hardware UART lines connected to the 3 room Unos.
+2. **Hub (ESP32 DevKit)**:
+   - Connects to the 3 room Unos (UART1 on GPIO 4/5, UART2 on GPIO 16/17, SoftwareSerial on GPIO 18/19).
    - 4-channel relay module:
      - Relays 1, 2, 3: Exhaust fans for Rooms 1, 2, 3 (triggered on gas/heat/smoke warning or alarm).
      - Relay 4: Building-wide emergency siren/beacon (activates if any room is in `ALARM`).
-   - Forwards consolidated telemetry to laptop over USB CDC Serial (`Serial`) at 115200 baud.
+   - Forwards consolidated telemetry to laptop over USB Serial (`Serial`) at 115200 baud.
    - Relays laptop routing commands back to the room Unos. If laptop disconnects, hub maintains emergency fallback.
 
 3. **Laptop Controller (`crowd_current/controller/main.py`)**:
@@ -79,18 +79,22 @@ crowd_current_code/
 - **Mode 3 (Blocked / Fire Hazard)**: **Rapid Emergency Strobe (~4 Hz)** (fast strobe alerting occupants of immediate hazard / do not enter).
 - **Mode 4 / 5 (Advisory / Caution)**: **Medium Warning Blink (1 Hz)** (slow caution flash for detours).
 
-### 3. ESP32-S3 Hub Wiring
+### 3. ESP32 DevKit Hub Wiring (Classic ESP32 / WROOM-32 / DevKit V1)
 
-| Room / Component | ESP32 RX Pin (from Uno TX via 1k/2k divider) | ESP32 TX Pin (to Uno RX direct) | Relay Pin (Active LOW) |
+| Room / Component | ESP32 RX Pin (from Uno TX via divider) | ESP32 TX Pin (to Uno RX direct) | Relay Pin (Active-LOW) |
 |---|---|---|---|
-| **Room 1** | **GPIO 4** | **GPIO 5** | Relay IN1 → **GPIO 17** (Fan 1) |
-| **Room 2** | **GPIO 6** | **GPIO 7** | Relay IN2 → **GPIO 18** (Fan 2) |
-| **Room 3** | **GPIO 15** | **GPIO 16** | Relay IN3 → **GPIO 8** (Fan 3) |
-| **Building Aux Siren** | — | — | Relay IN4 → **GPIO 9** (Siren/Strobe) |
+| **Room 1** (Hardware Serial1) | **GPIO 4** | **GPIO 5** | Relay IN1 → **GPIO 21** (Fan 1) |
+| **Room 2** (Hardware Serial2) | **GPIO 16** | **GPIO 17** | Relay IN2 → **GPIO 22** (Fan 2) |
+| **Room 3** (Software Serial) | **GPIO 18** | **GPIO 19** | Relay IN3 → **GPIO 23** (Fan 3) |
+| **Building Aux Siren** | — | — | Relay IN4 → **GPIO 25** (Siren/Strobe) |
 
-* **Arduino IDE Settings for ESP32-S3**:
-  - Board: **ESP32S3 Dev Module**
-  - **USB CDC On Boot**: **Enabled** (Required so `Serial` is the USB port to the laptop, leaving UART0, UART1, and UART2 free for the 3 Unos).
+> [!CAUTION]
+> **Never connect anything to GPIO 6, 7, 8, 9, 10, or 11 on an ESP32 DevKit.** These pins are directly wired to the internal SPI Flash memory chip. Connecting to them causes instant crashes or prevents boot.
+
+* **Arduino IDE Settings for ESP32 DevKit**:
+  - Board: **ESP32 Dev Module** (or **DOIT ESP32 DEVKIT V1**)
+  - Upload Speed: **921600** or **115200**
+  - Connect laptop to the ESP32 via Micro-USB / Type-C cable.
 
 ---
 

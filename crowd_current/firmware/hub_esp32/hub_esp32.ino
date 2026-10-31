@@ -1,24 +1,43 @@
 /*
-  Crowd Current - HUB (ESP32-S3).  Talks to 3 room Unos over UART and to the laptop over USB.
-  Arduino IDE:  Board = ESP32S3 Dev Module,  Tools -> "USB CDC On Boot" = ENABLED
-                (so `Serial` = the USB cable to the laptop and all 3 hardware UARTs are free).
-  Hub job : collect the 3 rooms, forward to laptop, pass laptop commands back to each Uno,
-            run the 3 fan relays + building siren, keep the building safe if the laptop dies.
-  Laptop protocol (same as before, run:  python main.py --serial COMx):
-      hub -> laptop : T,lvl,fault,ratio*100,temp,hum  (x3 rooms)        every 0.5 s
-      laptop -> hub : C,s0,s1,s2,s3,buz0,buz1,buz2,fan0,fan1,fan2,reset
-  Uno link: $U,...*HH from Unos,  $K,strip,buz,reset*HH to Unos   (XOR checksum), 38400 baud
+  Crowd Current - HUB (Classic ESP32 DevKit / NodeMCU-32S / ESP32-WROOM-32).
+  Talks to 3 room Unos over UART and to the laptop over USB Serial.
+
+  Arduino IDE:
+    Board: "ESP32 Dev Module" (or "DOIT ESP32 DEVKIT V1")
+    Upload speed: 921600 or 115200
+
+  Hardware Connections:
+    - Laptop: USB cable to ESP32 (Hardware UART0 @ 115200 baud via CP2102/CH340)
+    - Room 1: Hardware Serial1 (RX = GPIO 4,  TX = GPIO 5)  @ 38400 baud
+    - Room 2: Hardware Serial2 (RX = GPIO 16, TX = GPIO 17) @ 38400 baud
+    - Room 3: Software Serial  (RX = GPIO 18, TX = GPIO 19) @ 38400 baud
+    - 4-Channel Relays (Active-LOW):
+        IN1 (Room 1 Fan): GPIO 21
+        IN2 (Room 2 Fan): GPIO 22
+        IN3 (Room 3 Fan): GPIO 23
+        IN4 (Aux Siren):  GPIO 25
+
+  *** IMPORTANT FOR CLASSIC ESP32: ***
+  - GPIO 6, 7, 8, 9, 10, 11 are connected to internal SPI flash -> NEVER USE THEM.
+  - GPIO 1 and 3 are used by the USB port to the laptop.
+  - All selected pins below are 100% safe general-purpose GPIOs.
 */
 #include <Arduino.h>
+#include <SoftwareSerial.h>
 
 const int NR = 3;
-HardwareSerial* U[NR] = {&Serial1, &Serial2, &Serial0};
-const int RX_PIN[NR] = {4, 6, 15};     // <- Uno TX through 1k + 2k divider (5 V -> 3.3 V!)
-const int TX_PIN[NR] = {5, 7, 16};     // -> Uno RX (3.3 V is enough for an Uno)
-const int PIN_FAN[NR] = {17, 18, 8};  // 4-ch relay IN1..IN3 (12 V fans) - avoids SPI flash pin 10
-const int PIN_AUX = 9;                // IN4: siren/beacon when ANY room is in ALARM
+
+// Safe pin mapping for classic ESP32 DevKit
+const int RX_PIN[NR] = {4, 16, 18};    // <- Uno TX through voltage divider (5V -> 3.3V)
+const int TX_PIN[NR] = {5, 17, 19};    // -> Uno RX direct (3.3V is logic HIGH for Uno)
+const int PIN_FAN[NR] = {21, 22, 23};  // Relays IN1..IN3 (12V room fans)
+const int PIN_AUX = 25;                // Relay IN4: siren/beacon when ANY room is in ALARM
+
 const bool RELAY_ACTIVE_LOW = true;
 const unsigned long UNO_STALE_MS = 3000, PC_STALE_MS = 5000, FAN_HOLD_MS = 30000;
+
+SoftwareSerial softSerial(RX_PIN[2], TX_PIN[2]);
+Stream* U[NR];
 
 struct RoomState {
   uint8_t lvl = 0, fault = 1; int gr = 100, t = -1, h = -1, fl = 0;
@@ -67,13 +86,21 @@ void sendToUno(int i, uint8_t strip, uint8_t buz, uint8_t reset) {
 }
 
 void setup() {
-  Serial.begin(115200);                               // USB CDC to laptop
+  Serial.begin(115200);                               // USB serial to laptop (UART0)
+  Serial1.begin(38400, SERIAL_8N1, RX_PIN[0], TX_PIN[0]); // Room 1 Hardware UART1
+  Serial2.begin(38400, SERIAL_8N1, RX_PIN[1], TX_PIN[1]); // Room 2 Hardware UART2
+  softSerial.begin(38400, SWSERIAL_8N1, RX_PIN[2], TX_PIN[2]); // Room 3 Software UART
+
+  U[0] = &Serial1;
+  U[1] = &Serial2;
+  U[2] = &softSerial;
+
   for (int i = 0; i < NR; i++) {
-    U[i]->begin(38400, SERIAL_8N1, RX_PIN[i], TX_PIN[i]);
-    digitalWrite(PIN_FAN[i], RELAY_ACTIVE_LOW ? HIGH : LOW);      // level before output: no boot glitch
+    digitalWrite(PIN_FAN[i], RELAY_ACTIVE_LOW ? HIGH : LOW);
     pinMode(PIN_FAN[i], OUTPUT);
   }
-  digitalWrite(PIN_AUX, RELAY_ACTIVE_LOW ? HIGH : LOW); pinMode(PIN_AUX, OUTPUT);
+  digitalWrite(PIN_AUX, RELAY_ACTIVE_LOW ? HIGH : LOW);
+  pinMode(PIN_AUX, OUTPUT);
 }
 
 void loop() {
