@@ -37,20 +37,22 @@
       padding-bottom: 1rem;
       margin-bottom: 1.25rem;
       border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+      gap: 0.75rem;
     }
     .logo-area { display: flex; align-items: center; gap: 0.85rem; }
     .logo-badge {
-      width: 40px; height: 40px;
+      width: 42px; height: 42px;
       background: linear-gradient(135deg, #2563eb, #10b981);
       border-radius: 10px;
       display: flex; align-items: center; justify-content: center;
-      font-size: 22px; font-weight: 800; color: #fff;
+      font-size: 24px; font-weight: 800; color: #fff;
       box-shadow: 0 0 15px rgba(37, 99, 235, 0.5);
     }
     .brand-title { font-size: 1.35rem; font-weight: 800; letter-spacing: 0.5px; }
     .brand-subtitle { font-size: 0.78rem; color: var(--text-muted); font-weight: 500; }
 
-    .header-pills { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+    .header-pills { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
     .pill {
       font-size: 0.78rem; font-weight: 700;
       padding: 0.35rem 0.8rem; border-radius: 9999px;
@@ -94,14 +96,21 @@
     }
     .btn-reset-danger:hover { background: rgba(239, 68, 68, 0.3); }
 
-    /* Layout Grids */
-    .main-grid {
+    /* Hero Dual Viewport Grid */
+    .hero-viewport-grid {
       display: grid;
-      grid-template-columns: 1.25fr 0.95fr;
+      grid-template-columns: 1fr 1fr;
       gap: 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+    .hero-viewport-grid.mode-sim {
+      grid-template-columns: 1fr;
+    }
+    .hero-viewport-grid.mode-camera {
+      grid-template-columns: 1fr;
     }
     @media (max-width: 1200px) {
-      .main-grid { grid-template-columns: 1fr; }
+      .hero-viewport-grid { grid-template-columns: 1fr; }
     }
 
     .card {
@@ -127,10 +136,48 @@
       overflow: hidden; background: #050811;
       border: 1px solid #1a2744;
       box-shadow: inset 0 0 30px rgba(0,0,0,0.8);
+      aspect-ratio: 16 / 9;
+      display: flex; align-items: center; justify-content: center;
     }
     canvas#simCanvas {
-      display: block; width: 100%; height: auto;
+      display: block; width: 100%; height: 100%;
       cursor: crosshair;
+    }
+
+    /* Big Camera Container */
+    .camera-big-container {
+      position: relative; width: 100%; border-radius: 12px;
+      overflow: hidden; background: #000;
+      border: 1px solid #1a2744;
+      box-shadow: inset 0 0 30px rgba(0,0,0,0.8);
+      aspect-ratio: 16 / 9;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .camera-big-container img {
+      width: 100%; height: 100%;
+      object-fit: contain; display: block;
+    }
+    .camera-live-badge {
+      position: absolute; top: 12px; right: 12px;
+      background: rgba(16, 185, 129, 0.2); color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.5);
+      padding: 0.25rem 0.6rem; border-radius: 9999px;
+      font-size: 0.72rem; font-weight: 700;
+      backdrop-filter: blur(4px);
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+    }
+    .cam-overlay-ticker {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0.65rem 0.85rem;
+      background: var(--card-inner);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 8px; margin-top: 0.75rem;
+      font-size: 0.76rem; flex-wrap: wrap; gap: 0.5rem;
+    }
+    .cam-room-tag {
+      font-weight: 700; padding: 0.2rem 0.55rem;
+      border-radius: 5px; background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.06);
     }
 
     /* Judge Scenarios Bar */
@@ -155,6 +202,7 @@
       display: flex; justify-content: space-between; align-items: center;
       margin-top: 0.85rem; padding: 0.75rem; border-radius: 8px;
       background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05);
+      flex-wrap: wrap; gap: 0.5rem;
     }
     .toolbar-group { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 
@@ -163,6 +211,9 @@
       display: grid; grid-template-columns: repeat(4, 1fr);
       gap: 0.65rem; margin-top: 0.85rem;
     }
+    @media (max-width: 600px) {
+      .metrics-bar { grid-template-columns: repeat(2, 1fr); }
+    }
     .metric-box {
       background: var(--card-inner); padding: 0.65rem;
       border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);
@@ -170,6 +221,16 @@
     }
     .metric-label { font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; margin-bottom: 0.2rem; }
     .metric-val { font-size: 1.15rem; font-weight: 800; }
+
+    /* Bottom Grid: Left = Scenarios & Math, Right = Room Hardware Cards */
+    .bottom-grid {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 1.25rem;
+    }
+    @media (max-width: 1200px) {
+      .bottom-grid { grid-template-columns: 1fr; }
+    }
 
     /* Right Column: Room Control Cards */
     .room-card {
@@ -236,7 +297,6 @@
     }
     .math-table tr:last-child td { border-bottom: none; }
 
-    /* Tooltip / Hint helper */
     .hint-text { font-size: 0.74rem; color: var(--text-muted); font-style: italic; }
   </style>
 </head>
@@ -250,6 +310,7 @@
     function App() {
       // System state from API
       const [state, setState] = useState(null);
+      const [viewMode, setViewMode] = useState("dual"); // "dual", "camera", "sim"
       const [isSimMode, setIsSimMode] = useState(false);
       const [syncHardware, setSyncHardware] = useState(true);
       const [soundEnabled, setSoundEnabled] = useState(false);
@@ -324,7 +385,6 @@
             const gain = ctx.createGain();
             osc.type = "sawtooth";
             osc.frequency.setValueAtTime(650, ctx.currentTime);
-            // Siren pitch wobble
             osc.frequency.setTargetAtTime(900, ctx.currentTime + 0.3, 0.2);
             gain.gain.setValueAtTime(0.05, ctx.currentTime);
             osc.connect(gain);
@@ -418,7 +478,6 @@
         } else if (key === "congestion_e1") {
           setIsSimMode(true);
           setSimLevels({ R1: "NORMAL", R2: "NORMAL", R3: "NORMAL" });
-          // Overload R2 to choke E1 and trigger dynamic diversion to E2
           setSimCounts({ R1: 8, R2: 45, R3: 6 });
           sendSimUpdate({ enabled: true, warn: "R2", counts: { R1: 8, R2: 45, R3: 6 }, sync_hardware: syncHardware });
         } else if (key === "dual_fire") {
@@ -439,7 +498,6 @@
         E3: { x: 100, y: 240, label: "Exit 3 (E3)" },
       };
 
-      // Waypoints along corridors for smooth running path interpolation
       const getCorridorWaypoints = (from, to) => {
         if (from === "R1" && to === "E3") return [{ x: 260, y: 350 }, { x: 170, y: 310 }, { x: 100, y: 240 }];
         if (from === "E3" && to === "R1") return [{ x: 100, y: 240 }, { x: 170, y: 310 }, { x: 260, y: 350 }];
@@ -468,7 +526,7 @@
           ctx.fillStyle = "#070c17";
           ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-          // Draw architectural blueprint grid
+          // Blueprint grid
           ctx.strokeStyle = "rgba(30, 48, 80, 0.45)";
           ctx.lineWidth = 1;
           for (let x = 0; x < canvas.width; x += 30) {
@@ -496,7 +554,6 @@
           ];
 
           edges.forEach((e) => {
-            // Draw conduit tube
             ctx.beginPath();
             ctx.moveTo(e.pts[0].x, e.pts[0].y);
             for (let i = 1; i < e.pts.length; i++) ctx.lineTo(e.pts[i].x, e.pts[i].y);
@@ -506,22 +563,18 @@
             ctx.lineJoin = "round";
             ctx.stroke();
 
-            // Inner glass rail
             ctx.lineWidth = 4;
             ctx.strokeStyle = "rgba(40, 65, 110, 0.4)";
             ctx.stroke();
 
-            // LED Strip lighting rendering
             let stripState = 0;
             if (e.stripIdx >= 0 && currentStrips[e.stripIdx] !== undefined) {
               stripState = currentStrips[e.stripIdx];
             }
 
-            // Draw glowing LED dots along the conduit
             const totalDots = 14;
             for (let d = 0; d <= totalDots; d++) {
               const u = d / totalDots;
-              // Simple segment interpolation
               let pt;
               if (e.pts.length === 3) {
                 if (u < 0.5) {
@@ -539,23 +592,22 @@
                 pt = { x: e.pts[0].x + (e.pts[1].x - e.pts[0].x)*u, y: e.pts[0].y + (e.pts[1].y - e.pts[0].y)*u };
               }
 
-              // Color determination
               ctx.beginPath();
               ctx.arc(pt.x, pt.y, 3, 0, Math.PI * 2);
 
-              if (stripState === 1) { // Forward Green Run
+              if (stripState === 1) {
                 const wave = ((time * 0.003 - u * 3) % 1 + 1) % 1;
                 ctx.fillStyle = wave > 0.6 ? "#10b981" : "rgba(16, 185, 129, 0.25)";
                 ctx.shadowColor = "#10b981"; ctx.shadowBlur = wave > 0.6 ? 10 : 0;
-              } else if (stripState === 2) { // Reverse Green Run
+              } else if (stripState === 2) {
                 const wave = ((time * 0.003 + u * 3) % 1 + 1) % 1;
                 ctx.fillStyle = wave > 0.6 ? "#10b981" : "rgba(16, 185, 129, 0.25)";
                 ctx.shadowColor = "#10b981"; ctx.shadowBlur = wave > 0.6 ? 10 : 0;
-              } else if (stripState === 3) { // Rapid Red Strobe
+              } else if (stripState === 3) {
                 const blink = Math.floor(time / 130) % 2 === 0;
                 ctx.fillStyle = blink ? "#ef4444" : "rgba(239, 68, 68, 0.1)";
                 ctx.shadowColor = "#ef4444"; ctx.shadowBlur = blink ? 14 : 0;
-              } else if (stripState === 4 || stripState === 5) { // Amber Caution
+              } else if (stripState === 4 || stripState === 5) {
                 const pulse = Math.sin(time * 0.006) * 0.5 + 0.5;
                 ctx.fillStyle = `rgba(245, 158, 11, ${0.3 + pulse * 0.7})`;
                 ctx.shadowColor = "#f59e0b"; ctx.shadowBlur = 6;
@@ -567,7 +619,6 @@
               ctx.shadowBlur = 0;
             }
 
-            // Corridor length label
             const mid = e.pts[Math.floor(e.pts.length / 2)];
             ctx.font = "10px sans-serif";
             ctx.fillStyle = "rgba(148, 163, 184, 0.6)";
@@ -583,31 +634,26 @@
             const isAlarm = lvl === "ALARM";
             const isWarn = lvl === "WARNING" || lvl === "UNKNOWN";
 
-            // Room Background Box
             ctx.beginPath();
             ctx.roundRect(p.x - p.w/2, p.y - p.h/2, p.w, p.h, 12);
             ctx.fillStyle = isAlarm ? "rgba(239, 68, 68, 0.12)" : isWarn ? "rgba(245, 158, 11, 0.08)" : "rgba(19, 30, 54, 0.85)";
             ctx.fill();
 
-            // Border glow
             ctx.lineWidth = isAlarm ? 3 : 2;
             ctx.strokeStyle = isAlarm ? "#ef4444" : isWarn ? "#f59e0b" : "rgba(59, 130, 246, 0.5)";
             if (isAlarm) { ctx.shadowColor = "#ef4444"; ctx.shadowBlur = 18; }
             ctx.stroke();
             ctx.shadowBlur = 0;
 
-            // Room Title
             ctx.font = "bold 16px sans-serif";
             ctx.fillStyle = "#fff";
             ctx.textAlign = "left";
             ctx.fillText(r, p.x - p.w/2 + 14, p.y - p.h/2 + 24);
 
-            // Level Pill inside room
             ctx.font = "bold 10px sans-serif";
             ctx.fillStyle = isAlarm ? "#f87171" : isWarn ? "#fbbf24" : "#34d399";
             ctx.fillText(lvl, p.x - p.w/2 + 46, p.y - p.h/2 + 24);
 
-            // Gas & Temp Telemetry
             const telem = state?.telemetry?.rooms ? state.telemetry.rooms[idx] : null;
             const gasStr = telem ? `${telem.gr.toFixed(2)}x` : "1.00x";
             const tempStr = telem && telem.t >= 0 ? `${telem.t}°C` : (isAlarm ? "45°C" : "26°C");
@@ -616,7 +662,6 @@
             ctx.fillStyle = "#94a3b8";
             ctx.fillText(`Gas: ${gasStr} | Temp: ${tempStr}`, p.x - p.w/2 + 14, p.y + p.h/2 - 14);
 
-            // Exhaust Fan Spinner (top-right of room)
             const fanX = p.x + p.w/2 - 24;
             const fanY = p.y - p.h/2 + 22;
             const fanOn = Boolean(currentFans[idx]);
@@ -629,7 +674,6 @@
             ctx.strokeStyle = fanOn ? "#10b981" : "#475569";
             ctx.lineWidth = 1.5;
             ctx.stroke();
-            // Fan blades
             for (let b = 0; b < 4; b++) {
               ctx.rotate(Math.PI / 2);
               ctx.beginPath();
@@ -646,7 +690,6 @@
               ctx.fillText("FAN ON", fanX - 14, fanY + 3);
             }
 
-            // ---- Fire Particles Generation inside Alarm Rooms ----
             if (isAlarm && Math.random() < 0.6) {
               particlesRef.current.push({
                 x: p.x - p.w/2 + 15 + Math.random() * (p.w - 30),
@@ -675,7 +718,6 @@
             ctx.stroke();
             ctx.shadowBlur = 0;
 
-            // Door Icon inside
             ctx.font = "bold 12px sans-serif";
             ctx.fillStyle = "#fff";
             ctx.textAlign = "center";
@@ -714,9 +756,7 @@
             ? ((simCounts.R1 || 0) + (simCounts.R2 || 0) + (simCounts.R3 || 0))
             : (state ? ((state.counts.R1 || 0) + (state.counts.R2 || 0) + (state.counts.R3 || 0)) : 20);
 
-          // Spawn or replenish agents
           if (agentsRef.current.length < targetTotalAgents && Math.random() < 0.25) {
-            // Pick room with deficit
             const rKeys = ["R1", "R2", "R3"];
             const chosenRoom = rKeys[Math.floor(Math.random() * rKeys.length)];
             const rPos = nodePos[chosenRoom];
@@ -732,19 +772,16 @@
             });
           }
 
-          // Cap max agents
           if (agentsRef.current.length > targetTotalAgents) {
             agentsRef.current.splice(0, agentsRef.current.length - targetTotalAgents);
           }
 
-          // Update & draw agents
-          agentsRef.current.forEach((ag, agIdx) => {
+          agentsRef.current.forEach((ag) => {
             const isAssigned = currentAssign[ag.room];
             const isHazard = currentLevels[ag.room] === "ALARM";
 
-            // Determine route waypoints
             if (isAssigned && isAssigned.path && isAssigned.path.length >= 2) {
-              const pathNodes = isAssigned.path; // e.g. ["R1", "E3"] or ["R1", "R2", "E1"]
+              const pathNodes = isAssigned.path;
               if (!ag.waypoints || ag.targetExit !== isAssigned.exit) {
                 ag.targetExit = isAssigned.exit;
                 let fullPts = [];
@@ -759,22 +796,18 @@
               ag.waypoints = null;
             }
 
-            // Move agent
             if (ag.waypoints && ag.pathIdx < ag.waypoints.length) {
               const target = ag.waypoints[ag.pathIdx];
               const dx = target.x - ag.x;
               const dy = target.y - ag.y;
               const dist = Math.hypot(dx, dy);
 
-              // Evacuation sprint speed
               const runSpeed = (isHazard ? 4.2 : 2.8) * (ag.speed || 2.0);
 
               if (dist < 8) {
                 ag.pathIdx++;
                 if (ag.pathIdx >= ag.waypoints.length) {
-                  // Reached Exit!
                   setEvacuatedTotal((prev) => prev + 1);
-                  // Recycle agent back to random room
                   const rPos = nodePos[ag.room];
                   ag.x = rPos.x - rPos.w/4 + Math.random() * (rPos.w/2);
                   ag.y = rPos.y - rPos.h/4 + Math.random() * (rPos.h/2);
@@ -786,7 +819,6 @@
                 ag.y += (dy / dist) * runSpeed;
               }
             } else {
-              // Casual wandering inside the room when mode is normal
               const rPos = nodePos[ag.room];
               ag.x += (Math.random() - 0.5) * 1.0;
               ag.y += (Math.random() - 0.5) * 1.0;
@@ -794,7 +826,6 @@
               ag.y = Math.max(rPos.y - rPos.h/2 + 10, Math.min(rPos.y + rPos.h/2 - 10, ag.y));
             }
 
-            // Draw motion trail
             ag.trail.push({ x: ag.x, y: ag.y });
             if (ag.trail.length > 6) ag.trail.shift();
 
@@ -805,7 +836,6 @@
             ctx.lineWidth = 2;
             ctx.stroke();
 
-            // Draw person token
             ctx.beginPath();
             ctx.arc(ag.x, ag.y, isHazard ? 5 : 4, 0, Math.PI * 2);
             ctx.fillStyle = isHazard ? "#f87171" : currentMode === "EVACUATE" ? "#34d399" : "#38bdf8";
@@ -820,7 +850,7 @@
 
         animId = requestAnimationFrame(render);
         return () => cancelAnimationFrame(animId);
-      }, [state, simLevels, simCounts, isSimMode]);
+      }, [state, simLevels, simCounts, isSimMode, viewMode]);
 
       // Canvas click to interactively ignite fire or spawn people
       const handleCanvasClick = (e) => {
@@ -832,14 +862,12 @@
         const clickX = (e.clientX - rect.left) * scaleX;
         const clickY = (e.clientY - rect.top) * scaleY;
 
-        // Check if clicked in any room
         ["R1", "R2", "R3"].forEach((r) => {
           const p = nodePos[r];
           if (
             clickX >= p.x - p.w/2 && clickX <= p.x + p.w/2 &&
             clickY >= p.y - p.h/2 && clickY <= p.y + p.h/2
           ) {
-            // Toggle fire in that room!
             const isCurrentlyAlarm = (simLevels[r] === "ALARM");
             if (isCurrentlyAlarm) {
               clearRoomHazard(r);
@@ -873,6 +901,34 @@
               <span className="pill" style={{ color: "#34d399", borderColor: "rgba(52, 211, 153, 0.4)" }}>
                 ⚡ ESP32: {state?.telemetry ? "LIVE (COM3)" : "OFFLINE"}
               </span>
+
+              {/* View Mode Switcher */}
+              <div style={{ display: "inline-flex", background: "#111a2e", padding: "2px", borderRadius: "8px", border: "1px solid #223254" }}>
+                <button
+                  className={`btn-action ${viewMode === "dual" ? "btn-sync-active" : ""}`}
+                  style={{ padding: "0.3rem 0.65rem", fontSize: "0.72rem" }}
+                  onClick={() => setViewMode("dual")}
+                  title="Side-by-side Big Simulation & Big Camera"
+                >
+                  🌓 DUAL VIEW
+                </button>
+                <button
+                  className={`btn-action ${viewMode === "camera" ? "btn-sync-active" : ""}`}
+                  style={{ padding: "0.3rem 0.65rem", fontSize: "0.72rem" }}
+                  onClick={() => setViewMode("camera")}
+                  title="Maximize Camera Panel to full width"
+                >
+                  📹 BIG CAMERA
+                </button>
+                <button
+                  className={`btn-action ${viewMode === "sim" ? "btn-sync-active" : ""}`}
+                  style={{ padding: "0.3rem 0.65rem", fontSize: "0.72rem" }}
+                  onClick={() => setViewMode("sim")}
+                  title="Maximize Simulation to full width"
+                >
+                  🏢 BIG SIM
+                </button>
+              </div>
 
               <button
                 className={`btn-action ${isSimMode ? "btn-sim-active" : ""}`}
@@ -910,10 +966,10 @@
             </div>
           </header>
 
-          {/* Main Grid: Left = Canvas Digital Twin, Right = Controls & Telemetry */}
-          <div className="main-grid">
-            {/* Left Column: Canvas + Scenarios */}
-            <div>
+          {/* TOP SECTION: HERO VIEWPORTS (BIG SIMULATION + BIG CAMERA) */}
+          <div className={`hero-viewport-grid mode-${viewMode}`}>
+            {/* 1. Digital Twin Canvas Hero Card */}
+            {(viewMode === "dual" || viewMode === "sim") && (
               <div className="card">
                 <div className="card-header">
                   <div className="card-title">
@@ -925,7 +981,6 @@
                   <span className="hint-text">💡 Click any room to ignite / extinguish fire</span>
                 </div>
 
-                {/* The 2D Floorplan Canvas */}
                 <div className="canvas-container">
                   <canvas
                     id="simCanvas"
@@ -935,12 +990,87 @@
                     onClick={handleCanvasClick}
                   />
                 </div>
+              </div>
+            )}
 
-                {/* Judge 1-Click Demo Scenarios */}
+            {/* 2. BIG CAMERA PANEL HERO CARD */}
+            {(viewMode === "dual" || viewMode === "camera") && (
+              <div className="card camera-hero-card">
+                <div className="card-header">
+                  <div className="card-title">
+                    <span>📹 Physical Model Overhead Camera Stream</span>
+                    <span style={{ fontSize: "0.72rem", color: "#10b981", fontWeight: "normal" }}>
+                      ● OpenCV CV Token HUD Live Feed
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", gap: "0.4rem" }}>
+                    <button
+                      className="btn-action"
+                      style={{ padding: "0.2rem 0.5rem", fontSize: "0.7rem" }}
+                      onClick={() => setViewMode(viewMode === "camera" ? "dual" : "camera")}
+                    >
+                      {viewMode === "camera" ? "🌓 Exit Maximize" : "🔍 Maximize"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Big 16:9 Camera Container */}
+                <div className="camera-big-container">
+                  <img
+                    id="overhead-cam-img"
+                    src="/video_feed"
+                    alt="Physical Model Overhead Camera Stream"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      const fb = document.getElementById('cam-fallback');
+                      if (fb) fb.style.display = 'flex';
+                    }}
+                  />
+                  <div className="camera-live-badge">
+                    ● DROIDCAM LIVE (30 FPS)
+                  </div>
+                  <div
+                    id="cam-fallback"
+                    style={{
+                      display: "none", flexDirection: "column", alignItems: "center",
+                      justifyContent: "center", color: "#94a3b8", gap: "0.5rem"
+                    }}
+                  >
+                    <span style={{ fontSize: "2rem" }}>📹</span>
+                    <span>Camera Stream Standby or Reconnecting...</span>
+                  </div>
+                </div>
+
+                {/* Camera HUD Live Ticker */}
+                <div className="cam-overlay-ticker">
+                  <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                    <span style={{ fontWeight: "700", color: "#94a3b8" }}>OVERHEAD TOKENS:</span>
+                    <span className="cam-room-tag" style={{ color: "#60a5fa" }}>R1: n = {state?.counts?.R1 || 0}</span>
+                    <span className="cam-room-tag" style={{ color: "#60a5fa" }}>R2: n = {state?.counts?.R2 || 0}</span>
+                    <span className="cam-room-tag" style={{ color: "#60a5fa" }}>R3: n = {state?.counts?.R3 || 0}</span>
+                  </div>
+                  <div style={{ color: "#94a3b8", fontSize: "0.72rem" }}>
+                    <span>Resolution: 960×420 | Congestion CV Token Counter</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* BOTTOM SECTION: Left = Judge Scenarios & Math Table; Right = Room Nodes & Actuators */}
+          <div className="bottom-grid">
+            {/* Left Column: Scenarios, Controls, Metrics & Math */}
+            <div>
+              <div className="card">
+                <div className="card-header">
+                  <div className="card-title">
+                    <span>⚖️ Judge Presentation Controls & Demo Scenarios</span>
+                  </div>
+                  <span className="hint-text">1-Click Live Demonstrations</span>
+                </div>
+
+                {/* Scenarios Quick-Launch Bar */}
                 <div className="scenarios-bar">
-                  <span style={{ fontSize: "0.74rem", fontWeight: "700", color: "#cbd5e1", alignSelf: "center", marginRight: "4px" }}>
-                    ⚖️ JUDGE DEMOS:
-                  </span>
                   <button
                     className={`scenario-btn ${activeScenario === "live" ? "active" : ""}`}
                     onClick={() => loadScenario("live")}
@@ -1104,7 +1234,7 @@
               </div>
             </div>
 
-            {/* Right Column: Room Controls, Live Hardware Sensors & Camera Feed */}
+            {/* Right Column: Room Controls, Live Hardware Sensors & Actuators */}
             <div>
               <div className="card">
                 <div className="card-header">
@@ -1225,24 +1355,6 @@
                     </div>
                   );
                 })}
-              </div>
-
-              {/* Live Camera Feed Panel */}
-              <div className="card" style={{ marginTop: "1.25rem" }}>
-                <div className="card-header">
-                  <div className="card-title">
-                    <span>📹 Physical Model Overhead Camera Feed</span>
-                  </div>
-                  <span style={{ fontSize: "0.72rem", color: "#10b981" }}>● DROIDCAM HUD</span>
-                </div>
-                <div style={{ position: "relative", width: "100%", borderRadius: "8px", overflow: "hidden", background: "#000", minHeight: "180px" }}>
-                  <img
-                    src="/video_feed"
-                    alt="Physical Camera HUD"
-                    style={{ width: "100%", height: "auto", display: "block" }}
-                    onError={(e) => { e.target.style.display = 'none'; }}
-                  />
-                </div>
               </div>
             </div>
           </div>
