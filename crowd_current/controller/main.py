@@ -9,7 +9,7 @@ Web Dashboard available at:
 Keys in the OpenCV window:
   1 / 2 / 3 = toggle simulated ALARM in room 1 / 2 / 3
   4 / 5 / 6 = toggle simulated WARNING in room 1 / 2 / 3
-  r         = reset latched alarms
+  r         = reset latched alarms & revert all manual overrides to AUTO
   q         = quit
 """
 import argparse, csv, logging, threading, time
@@ -43,6 +43,11 @@ commands = {
 reset_until = 0.0
 sim = {r: None for r in C.ROOMS}
 
+# Manual override states: None = AUTO, integer = Forced Value
+manual_fan = [None] * len(C.ROOMS)     # None=Auto, 1=Force ON, 0=Force OFF
+manual_buz = [None] * len(C.ROOMS)     # None=Auto, 2=Force Siren/Alarm, 0=Force OFF
+manual_s = [None] * len(C.STRIP_SLOTS) # None=Auto, 1=Solid ON, 3=Strobe Hazard, 0=OFF
+
 system_state = {
     "mode": "NORMAL",
     "levels": {r: "NORMAL" for r in C.ROOMS},
@@ -52,6 +57,11 @@ system_state = {
     "fans": [0] * len(C.ROOMS),
     "buz": [0] * len(C.ROOMS),
     "strips": [0] * len(C.STRIP_SLOTS),
+    "manual": {
+        "fans": manual_fan,
+        "buz": manual_buz,
+        "strips": manual_s,
+    },
     "telemetry": None,
     "timestamp": time.time(),
 }
@@ -65,7 +75,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Crowd Current — Mission Control</title>
+  <title>Crowd Current — Mission Control & Manual Override</title>
   <style>
     :root {
       --bg: #090d16;
@@ -83,9 +93,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
     .logo-area { display: flex; align-items: center; gap: 0.75rem; }
     .logo-icon { width: 36px; height: 36px; background: linear-gradient(135deg, #2563eb, #10b981); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 20px; color: white; }
-    .title { font-size: 1.5rem; font-weight: 700; letter-spacing: 0.5px; }
-    .subtitle { font-size: 0.85rem; color: var(--text-muted); }
-    .status-badge { font-size: 0.95rem; font-weight: 700; padding: 0.4rem 1rem; border-radius: 9999px; text-transform: uppercase; letter-spacing: 1px; display: inline-flex; align-items: center; gap: 0.5rem; }
+    .title { font-size: 1.4rem; font-weight: 700; letter-spacing: 0.5px; }
+    .subtitle { font-size: 0.8rem; color: var(--text-muted); }
+    .status-badge { font-size: 0.9rem; font-weight: 700; padding: 0.4rem 1rem; border-radius: 9999px; text-transform: uppercase; letter-spacing: 1px; display: inline-flex; align-items: center; gap: 0.5rem; }
     .badge-normal { background: rgba(16, 185, 129, 0.15); color: var(--green); border: 1px solid rgba(16, 185, 129, 0.4); }
     .badge-advisory { background: rgba(245, 158, 11, 0.15); color: var(--amber); border: 1px solid rgba(245, 158, 11, 0.4); }
     .badge-evacuate { background: rgba(239, 68, 68, 0.2); color: var(--red); border: 1px solid rgba(239, 68, 68, 0.5); animation: pulse 1s infinite; }
@@ -100,30 +110,43 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     .video-container { position: relative; width: 100%; border-radius: 8px; overflow: hidden; background: #000; min-height: 280px; }
     .video-feed { width: 100%; height: auto; display: block; }
     
-    .room-card { margin-bottom: 1rem; border: 1px solid var(--border); border-radius: 10px; padding: 1rem; background: rgba(255,255,255,0.02); transition: all 0.2s; }
+    .room-card { margin-bottom: 1.25rem; border: 1px solid var(--border); border-radius: 10px; padding: 1rem; background: rgba(255,255,255,0.02); transition: all 0.2s; }
     .room-card:last-child { margin-bottom: 0; }
     .room-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
     .room-name { font-size: 1.15rem; font-weight: 700; }
     .room-meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-bottom: 0.75rem; text-align: center; }
     .meta-box { background: rgba(0,0,0,0.25); padding: 0.5rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05); }
-    .meta-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.25rem; }
+    .meta-label { font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.25rem; }
     .meta-val { font-size: 0.95rem; font-weight: 700; }
     .route-box { background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); padding: 0.6rem 0.8rem; border-radius: 6px; font-size: 0.85rem; color: #93c5fd; margin-bottom: 0.75rem; font-weight: 500; }
     
-    .actuators { display: flex; gap: 0.75rem; font-size: 0.8rem; color: var(--text-muted); }
-    .act-tag { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.25rem 0.5rem; border-radius: 4px; background: rgba(255,255,255,0.05); }
+    .actuators { display: flex; flex-direction: column; gap: 0.6rem; padding: 0.75rem; border-radius: 8px; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.05); }
+    .act-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; }
+    .act-tag { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.5rem; border-radius: 4px; background: rgba(255,255,255,0.05); font-size: 0.8rem; }
     .act-active { background: rgba(16, 185, 129, 0.2); color: var(--green); font-weight: 600; }
     .act-hazard { background: rgba(239, 68, 68, 0.2); color: var(--red); font-weight: 600; }
 
+    /* Override buttons */
+    .ctrl-group { display: inline-flex; border-radius: 6px; overflow: hidden; border: 1px solid #334155; }
+    .ctrl-btn { background: #1e293b; color: #94a3b8; border: none; padding: 0.25rem 0.6rem; font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: all 0.15s; border-right: 1px solid #334155; }
+    .ctrl-btn:last-child { border-right: none; }
+    .ctrl-btn:hover { background: #334155; color: white; }
+    .ctrl-active { background: #2563eb !important; color: white !important; }
+    .ctrl-on { background: #059669 !important; color: white !important; }
+    .ctrl-off { background: #dc2626 !important; color: white !important; }
+    .ctrl-strobe { background: #d97706 !important; color: white !important; }
+
     .btn-group { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
-    button { background: #1e293b; color: white; border: 1px solid #334155; padding: 0.4rem 0.75rem; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.15s; }
-    button:hover { background: #334155; }
+    button.action-btn { background: #1e293b; color: white; border: 1px solid #334155; padding: 0.35rem 0.65rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+    button.action-btn:hover { background: #334155; }
     .btn-alarm { background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.4); color: #fca5a5; }
     .btn-alarm:hover { background: rgba(239, 68, 68, 0.4); }
     .btn-warn { background: rgba(245, 158, 11, 0.2); border-color: rgba(245, 158, 11, 0.4); color: #fde68a; }
     .btn-warn:hover { background: rgba(245, 158, 11, 0.4); }
-    .btn-reset { background: linear-gradient(135deg, #2563eb, #1d4ed8); border: none; padding: 0.5rem 1.25rem; font-size: 0.9rem; }
+    .btn-reset { background: linear-gradient(135deg, #2563eb, #1d4ed8); border: none; padding: 0.5rem 1rem; font-size: 0.85rem; font-weight: 600; border-radius: 6px; color: white; cursor: pointer; }
     .btn-reset:hover { opacity: 0.9; }
+    .btn-all-auto { background: #334155; border: none; padding: 0.5rem 1rem; font-size: 0.85rem; font-weight: 600; border-radius: 6px; color: white; cursor: pointer; }
+    .btn-all-auto:hover { background: #475569; }
 
     .alerts-card { margin-top: 1.5rem; }
     .alert-item { padding: 0.5rem 0.75rem; border-radius: 6px; background: rgba(239, 68, 68, 0.15); border-left: 3px solid var(--red); color: #fca5a5; margin-bottom: 0.5rem; font-size: 0.85rem; font-weight: 500; }
@@ -135,11 +158,12 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       <div class="logo-icon">⚡</div>
       <div>
         <div class="title">CROWD CURRENT</div>
-        <div class="subtitle">Multi-Node Intelligent Evacuation & Hazard Control</div>
+        <div class="subtitle">Multi-Node Dynamic Evacuation & Hardware Control Center</div>
       </div>
     </div>
-    <div style="display: flex; align-items: center; gap: 1rem;">
+    <div style="display: flex; align-items: center; gap: 0.75rem;">
       <div id="mode-badge" class="status-badge badge-normal">NORMAL</div>
+      <button class="btn-all-auto" onclick="setManual('all_auto')">⚡ ALL AUTO</button>
       <button class="btn-reset" onclick="sendAction('RESET')">↺ RESET ALARMS</button>
     </div>
   </div>
@@ -148,7 +172,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     <!-- Camera Section -->
     <div class="card">
       <div class="card-title">
-        <span>Overhead Vision Stream (HUD)</span>
+        <span>Overhead Camera Stream (CV HUD)</span>
         <span id="cam-status" style="font-size: 0.8rem; color: var(--green);">● LIVE FEED</span>
       </div>
       <div class="video-container">
@@ -158,15 +182,15 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         </div>
       </div>
       <div style="margin-top: 1rem; font-size: 0.8rem; color: var(--text-muted); display: flex; justify-content: space-between;">
-        <span>Routing Algorithm: Congestion-Aware Dijkstra</span>
-        <span>Detection: Blob Surface Integration</span>
+        <span>Routing: Congestion-Aware Dijkstra</span>
+        <span>Actuator Override: Hardware Serial (115200)</span>
       </div>
     </div>
 
-    <!-- Rooms Section -->
+    <!-- Rooms Section with Live Telemetry + Manual Control -->
     <div class="card">
       <div class="card-title">
-        <span>Room Hazard & Route Telemetry</span>
+        <span>Room Controls & Real-Time Sensors</span>
         <span id="aux-siren" class="act-tag">SIREN: SILENT</span>
       </div>
       <div id="rooms-container">
@@ -201,7 +225,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       );
 
       // 2. Aux Siren
-      const anyAlarm = Object.values(data.levels).includes('ALARM');
+      const anyAlarm = Object.values(data.levels).includes('ALARM') || (data.buz && data.buz.some(b => b > 0));
       const sirenTag = document.getElementById('aux-siren');
       sirenTag.innerText = anyAlarm ? '🚨 SIREN: SOUNDING' : 'SIREN: SILENT';
       sirenTag.className = 'act-tag ' + (anyAlarm ? 'act-hazard' : '');
@@ -210,6 +234,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       const rc = document.getElementById('rooms-container');
       const rooms = ['R1', 'R2', 'R3'];
       let html = '';
+
+      const man = data.manual || { fans: [null, null, null], strips: [null, null, null] };
 
       rooms.forEach((r, idx) => {
         const lvl = data.levels[r] || 'UNKNOWN';
@@ -222,12 +248,12 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         const hum = telem && telem.h >= 0 ? telem.h + ' %' : '--';
         const flame = telem ? (telem.fl ? '🔥 FLAME' : 'CLEAR') : '--';
 
-        const fanOn = data.fans && data.fans[idx];
-        const stripMode = data.strips ? data.strips[idx] : 0;
-        let ledText = 'OFF';
-        if (stripMode === 1 || stripMode === 2) ledText = 'EVAC GREEN';
-        else if (stripMode === 3) ledText = 'STROBE RED';
-        else if (stripMode === 4 || stripMode === 5) ledText = 'AMBER PULSE';
+        const fanRunning = Boolean(data.fans && data.fans[idx]);
+        const stripVal = data.strips ? data.strips[idx] : 0;
+        let ledStatusText = 'OFF';
+        if (stripVal === 1 || stripVal === 2) ledStatusText = 'ROUTE ILLUMINATION';
+        else if (stripVal === 3) ledStatusText = 'DANGER STROBE';
+        else if (stripVal === 4 || stripVal === 5) ledStatusText = 'CAUTION BLINK';
 
         const routeText = assign ? `🚪 Evacuate via <b>${assign.exit}</b> &nbsp;(Path: ${assign.path.join(' → ')})` : 'No active evacuation guidance';
 
@@ -235,6 +261,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         if (lvl === 'ALARM') badgeClass = 'badge-evacuate';
         else if (lvl === 'WARNING') badgeClass = 'badge-advisory';
         else if (lvl === 'UNKNOWN') badgeClass = '';
+
+        const mFan = man.fans[idx];
+        const mLed = man.strips[idx];
 
         html += `
           <div class="room-card" style="border-left: 4px solid ${lvl==='ALARM'?'#ef4444':lvl==='WARNING'?'#f59e0b':'#10b981'};">
@@ -249,14 +278,34 @@ DASHBOARD_HTML = """<!DOCTYPE html>
               <div class="meta-box"><div class="meta-label">Temp</div><div class="meta-val">${temp}</div></div>
               <div class="meta-box"><div class="meta-label">Flame</div><div class="meta-val" style="${telem && telem.fl ? 'color:#ef4444;font-weight:800;' : ''}">${flame}</div></div>
             </div>
+
+            <!-- Manual Overrides for Actuators -->
             <div class="actuators">
-              <span class="act-tag ${fanOn ? 'act-active' : ''}">🌀 Fan: ${fanOn ? 'RUNNING' : 'OFF'}</span>
-              <span class="act-tag ${stripMode===3 ? 'act-hazard' : (stripMode ? 'act-active' : '')}">💡 LEDs: ${ledText}</span>
+              <div class="act-row">
+                <span>🌀 <b>Exhaust Fan</b>: <span class="${fanRunning ? 'act-active' : ''}">${fanRunning ? 'RUNNING' : 'OFF'}</span></span>
+                <div class="ctrl-group">
+                  <button class="ctrl-btn ${mFan===null ? 'ctrl-active' : ''}" onclick="setManual('fan', ${idx}, null)">AUTO</button>
+                  <button class="ctrl-btn ${mFan===1 ? 'ctrl-on' : ''}" onclick="setManual('fan', ${idx}, 1)">FORCE ON</button>
+                  <button class="ctrl-btn ${mFan===0 ? 'ctrl-off' : ''}" onclick="setManual('fan', ${idx}, 0)">OFF</button>
+                </div>
+              </div>
+
+              <div class="act-row">
+                <span>💡 <b>6 Red LEDs</b>: <span class="${stripVal===3 ? 'act-hazard' : (stripVal ? 'act-active' : '')}">${ledStatusText}</span></span>
+                <div class="ctrl-group">
+                  <button class="ctrl-btn ${mLed===null ? 'ctrl-active' : ''}" onclick="setManual('led', ${idx}, null)">AUTO</button>
+                  <button class="ctrl-btn ${mLed===1 ? 'ctrl-on' : ''}" onclick="setManual('led', ${idx}, 1)">ON</button>
+                  <button class="ctrl-btn ${mLed===3 ? 'ctrl-strobe' : ''}" onclick="setManual('led', ${idx}, 3)">STROBE</button>
+                  <button class="ctrl-btn ${mLed===0 ? 'ctrl-off' : ''}" onclick="setManual('led', ${idx}, 0)">OFF</button>
+                </div>
+              </div>
             </div>
+
+            <!-- Simulation Triggers -->
             <div class="btn-group">
-              <button class="btn-alarm" onclick="sendAction('ALARM', '${r}')">🔥 Test Alarm</button>
-              <button class="btn-warn" onclick="sendAction('WARNING', '${r}')">⚠️ Test Warning</button>
-              <button onclick="sendAction('CLEAR', '${r}')">✓ Clear</button>
+              <button class="action-btn btn-alarm" onclick="sendAction('ALARM', '${r}')">🔥 Test Fire</button>
+              <button class="action-btn btn-warn" onclick="sendAction('WARNING', '${r}')">⚠️ Test Warning</button>
+              <button class="action-btn" onclick="sendAction('CLEAR', '${r}')">✓ Clear</button>
             </div>
           </div>
         `;
@@ -271,6 +320,19 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         al.innerHTML = data.alerts.map(a => `<div class="alert-item">⚠️ ${a}</div>`).join('');
       } else {
         ac.style.display = 'none';
+      }
+    }
+
+    async function setManual(device, index = 0, value = null) {
+      try {
+        await fetch('/api/manual', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ device, index, value })
+        });
+        fetchState();
+      } catch (e) {
+        console.error("Manual control error:", e);
       }
     }
 
@@ -320,9 +382,35 @@ def api_state():
         return jsonify(system_state)
 
 
+@app.post("/api/manual")
+def api_manual():
+    global manual_fan, manual_buz, manual_s
+    data = request.get_json(force=True) or {}
+    dev = data.get("device")
+    idx = int(data.get("index", 0))
+    val = data.get("value")  # None, 0, 1, 2, 3
+    with lock:
+        if dev == "fan" and 0 <= idx < len(manual_fan):
+            manual_fan[idx] = val
+        elif dev == "buz" and 0 <= idx < len(manual_buz):
+            manual_buz[idx] = val
+        elif dev == "led" and 0 <= idx < len(manual_s):
+            manual_s[idx] = val
+        elif dev == "all_auto":
+            manual_fan = [None] * len(C.ROOMS)
+            manual_buz = [None] * len(C.ROOMS)
+            manual_s = [None] * len(C.STRIP_SLOTS)
+    return jsonify({
+        "ok": True,
+        "manual_fan": manual_fan,
+        "manual_buz": manual_buz,
+        "manual_s": manual_s,
+    })
+
+
 @app.post("/api/action")
 def api_action():
-    global sim, reset_until
+    global sim, reset_until, manual_fan, manual_buz, manual_s
     data = request.get_json(force=True) or {}
     act = data.get("action")
     room = data.get("room")
@@ -335,6 +423,9 @@ def api_action():
             sim[room] = None
         elif act == "RESET":
             sim = {r: None for r in C.ROOMS}
+            manual_fan = [None] * len(C.ROOMS)
+            manual_buz = [None] * len(C.ROOMS)
+            manual_s = [None] * len(C.STRIP_SLOTS)
             reset_until = time.time() + 3.0
     return jsonify({"ok": True, "sim": sim})
 
@@ -483,10 +574,30 @@ while True:
     with lock:
         levels = room_levels()
         res = planner.plan(levels, last_counts, now)
+
+        # Automatic decisions
+        auto_s = [res["strips"].get(s, IDLE) for s in C.STRIP_SLOTS]
+        auto_fan = [int(levels[r] != "NORMAL") for r in C.ROOMS]
+        auto_buz = [2 if res["mode"] == "EVACUATE" else 0 for r in C.ROOMS]
+
+        # Apply manual overrides if set by the operator in the Web UI
+        final_s = [
+            manual_s[i] if manual_s[i] is not None else auto_s[i]
+            for i in range(len(C.STRIP_SLOTS))
+        ]
+        final_fan = [
+            manual_fan[i] if manual_fan[i] is not None else auto_fan[i]
+            for i in range(len(C.ROOMS))
+        ]
+        final_buz = [
+            manual_buz[i] if manual_buz[i] is not None else auto_buz[i]
+            for i in range(len(C.ROOMS))
+        ]
+
         commands = {
-            "s": [res["strips"].get(s, IDLE) for s in C.STRIP_SLOTS],
-            "fan": [int(levels[r] != "NORMAL") for r in C.ROOMS],
-            "buz": [2 if res["mode"] == "EVACUATE" else 0 for r in C.ROOMS],
+            "s": final_s,
+            "fan": final_fan,
+            "buz": final_buz,
         }
 
         # Update global system state for Web UI
@@ -499,6 +610,11 @@ while True:
             "fans": commands["fan"],
             "buz": commands["buz"],
             "strips": commands["s"],
+            "manual": {
+                "fans": list(manual_fan),
+                "buz": list(manual_buz),
+                "strips": list(manual_s),
+            },
             "telemetry": telemetry,
             "timestamp": now,
         }
@@ -557,6 +673,10 @@ while True:
         sim[r] = None if sim[r] == "WARNING" else "WARNING"
     if k == ord("r"):
         sim = {r: None for r in C.ROOMS}
+        with lock:
+            manual_fan = [None] * len(C.ROOMS)
+            manual_buz = [None] * len(C.ROOMS)
+            manual_s = [None] * len(C.STRIP_SLOTS)
         reset_until = time.time() + 3.0
 
 cv2.destroyAllWindows()
