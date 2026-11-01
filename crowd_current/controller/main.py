@@ -14,7 +14,7 @@ Keys in the OpenCV window:
 """
 import argparse, csv, logging, threading, time
 import cv2, numpy as np
-from flask import Flask, jsonify, request, Response
+from flask import Flask, jsonify, request, Response, send_file
 import config as C
 from routing import Planner, IDLE
 
@@ -67,310 +67,16 @@ system_state = {
 }
 
 # ---------------- Web Dashboard & API (Flask) ----------------
-app = Flask(__name__)
-logging.getLogger("werkzeug").setLevel(logging.ERROR)
+app = Flask(__name__, template_folder='templates', static_folder='static')
+logging.getLogger('werkzeug').setLevel(logging.ERROR)
 
-DASHBOARD_HTML = """<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Crowd Current — Mission Control & Manual Override</title>
-  <style>
-    :root {
-      --bg: #090d16;
-      --card-bg: #131c2e;
-      --border: #1e2d4a;
-      --text: #e2e8f0;
-      --text-muted: #94a3b8;
-      --green: #10b981;
-      --amber: #f59e0b;
-      --red: #ef4444;
-      --blue: #3b82f6;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-    body { background-color: var(--bg); color: var(--text); padding: 1.5rem; }
-    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
-    .logo-area { display: flex; align-items: center; gap: 0.75rem; }
-    .logo-icon { width: 36px; height: 36px; background: linear-gradient(135deg, #2563eb, #10b981); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 20px; color: white; }
-    .title { font-size: 1.4rem; font-weight: 700; letter-spacing: 0.5px; }
-    .subtitle { font-size: 0.8rem; color: var(--text-muted); }
-    .status-badge { font-size: 0.9rem; font-weight: 700; padding: 0.4rem 1rem; border-radius: 9999px; text-transform: uppercase; letter-spacing: 1px; display: inline-flex; align-items: center; gap: 0.5rem; }
-    .badge-normal { background: rgba(16, 185, 129, 0.15); color: var(--green); border: 1px solid rgba(16, 185, 129, 0.4); }
-    .badge-advisory { background: rgba(245, 158, 11, 0.15); color: var(--amber); border: 1px solid rgba(245, 158, 11, 0.4); }
-    .badge-evacuate { background: rgba(239, 68, 68, 0.2); color: var(--red); border: 1px solid rgba(239, 68, 68, 0.5); animation: pulse 1s infinite; }
-    @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.85; transform: scale(1.02); } }
-    
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
-    @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
-    
-    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3); }
-    .card-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; }
-    
-    .video-container { position: relative; width: 100%; border-radius: 8px; overflow: hidden; background: #000; min-height: 280px; }
-    .video-feed { width: 100%; height: auto; display: block; }
-    
-    .room-card { margin-bottom: 1.25rem; border: 1px solid var(--border); border-radius: 10px; padding: 1rem; background: rgba(255,255,255,0.02); transition: all 0.2s; }
-    .room-card:last-child { margin-bottom: 0; }
-    .room-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
-    .room-name { font-size: 1.15rem; font-weight: 700; }
-    .room-meta { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-bottom: 0.75rem; text-align: center; }
-    .meta-box { background: rgba(0,0,0,0.25); padding: 0.5rem; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05); }
-    .meta-label { font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.25rem; }
-    .meta-val { font-size: 0.95rem; font-weight: 700; }
-    .route-box { background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); padding: 0.6rem 0.8rem; border-radius: 6px; font-size: 0.85rem; color: #93c5fd; margin-bottom: 0.75rem; font-weight: 500; }
-    
-    .actuators { display: flex; flex-direction: column; gap: 0.6rem; padding: 0.75rem; border-radius: 8px; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.05); }
-    .act-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; }
-    .act-tag { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.5rem; border-radius: 4px; background: rgba(255,255,255,0.05); font-size: 0.8rem; }
-    .act-active { background: rgba(16, 185, 129, 0.2); color: var(--green); font-weight: 600; }
-    .act-hazard { background: rgba(239, 68, 68, 0.2); color: var(--red); font-weight: 600; }
+sim_enabled = False
+sync_hardware = True
+sim_counts = {r: 10 for r in C.ROOMS}
 
-    /* Override buttons */
-    .ctrl-group { display: inline-flex; border-radius: 6px; overflow: hidden; border: 1px solid #334155; }
-    .ctrl-btn { background: #1e293b; color: #94a3b8; border: none; padding: 0.25rem 0.6rem; font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: all 0.15s; border-right: 1px solid #334155; }
-    .ctrl-btn:last-child { border-right: none; }
-    .ctrl-btn:hover { background: #334155; color: white; }
-    .ctrl-active { background: #2563eb !important; color: white !important; }
-    .ctrl-on { background: #059669 !important; color: white !important; }
-    .ctrl-off { background: #dc2626 !important; color: white !important; }
-    .ctrl-strobe { background: #d97706 !important; color: white !important; }
-
-    .btn-group { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
-    button.action-btn { background: #1e293b; color: white; border: 1px solid #334155; padding: 0.35rem 0.65rem; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer; transition: all 0.15s; }
-    button.action-btn:hover { background: #334155; }
-    .btn-alarm { background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.4); color: #fca5a5; }
-    .btn-alarm:hover { background: rgba(239, 68, 68, 0.4); }
-    .btn-warn { background: rgba(245, 158, 11, 0.2); border-color: rgba(245, 158, 11, 0.4); color: #fde68a; }
-    .btn-warn:hover { background: rgba(245, 158, 11, 0.4); }
-    .btn-reset { background: linear-gradient(135deg, #2563eb, #1d4ed8); border: none; padding: 0.5rem 1rem; font-size: 0.85rem; font-weight: 600; border-radius: 6px; color: white; cursor: pointer; }
-    .btn-reset:hover { opacity: 0.9; }
-    .btn-all-auto { background: #334155; border: none; padding: 0.5rem 1rem; font-size: 0.85rem; font-weight: 600; border-radius: 6px; color: white; cursor: pointer; }
-    .btn-all-auto:hover { background: #475569; }
-
-    .alerts-card { margin-top: 1.5rem; }
-    .alert-item { padding: 0.5rem 0.75rem; border-radius: 6px; background: rgba(239, 68, 68, 0.15); border-left: 3px solid var(--red); color: #fca5a5; margin-bottom: 0.5rem; font-size: 0.85rem; font-weight: 500; }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <div class="logo-area">
-      <div class="logo-icon">⚡</div>
-      <div>
-        <div class="title">CROWD CURRENT</div>
-        <div class="subtitle">Multi-Node Dynamic Evacuation & Hardware Control Center</div>
-      </div>
-    </div>
-    <div style="display: flex; align-items: center; gap: 0.75rem;">
-      <div id="hub-badge" class="status-badge" style="background: rgba(16, 185, 129, 0.15); color: var(--green); border: 1px solid rgba(16, 185, 129, 0.4); font-size: 0.75rem;">⚡ ESP32: CONNECTED</div>
-      <div id="mode-badge" class="status-badge badge-normal">NORMAL</div>
-      <button class="btn-all-auto" onclick="setManual('all_auto')">⚡ ALL AUTO</button>
-      <button class="btn-reset" onclick="sendAction('RESET')">↺ RESET ALARMS</button>
-    </div>
-  </div>
-
-  <div class="grid">
-    <!-- Camera Section -->
-    <div class="card">
-      <div class="card-title">
-        <span>Overhead Camera Stream (CV HUD)</span>
-        <span id="cam-status" style="font-size: 0.8rem; color: var(--green);">● LIVE FEED</span>
-      </div>
-      <div class="video-container">
-        <img class="video-feed" src="/video_feed" alt="Camera Stream" onerror="this.style.display='none'; document.getElementById('vid-fallback').style.display='block';">
-        <div id="vid-fallback" style="display:none; padding: 3rem; text-align: center; color: var(--text-muted);">
-          Camera Feed Offline or in Simulation Mode
-        </div>
-      </div>
-      <div style="margin-top: 1rem; font-size: 0.8rem; color: var(--text-muted); display: flex; justify-content: space-between;">
-        <span>Routing: Congestion-Aware Dijkstra</span>
-        <span>Actuator Override: Hardware Serial (115200)</span>
-      </div>
-    </div>
-
-    <!-- Rooms Section with Live Telemetry + Manual Control -->
-    <div class="card">
-      <div class="card-title">
-        <span>Room Controls & Real-Time Sensors</span>
-        <span id="aux-siren" class="act-tag">SIREN: SILENT</span>
-      </div>
-      <div id="rooms-container">
-        <!-- Rendered by JS -->
-      </div>
-    </div>
-  </div>
-
-  <div class="card alerts-card" id="alerts-container" style="display: none;">
-    <div class="card-title" style="color: var(--red);">System Alerts & Warnings</div>
-    <div id="alerts-list"></div>
-  </div>
-
-  <script>
-    async function fetchState() {
-      try {
-        const res = await fetch('/api/state');
-        const data = await res.json();
-        updateUI(data);
-      } catch (e) {
-        console.error("Failed to fetch state:", e);
-      }
-    }
-
-    function updateUI(data) {
-      // 0. Hub Connection Badge
-      const hb = document.getElementById('hub-badge');
-      if (data.telemetry && (Date.now() / 1000 - data.telemetry.rx < 5)) {
-        hb.innerText = '⚡ ESP32: LIVE (COM3)';
-        hb.style.color = '#10b981';
-      } else {
-        hb.innerText = '⚠️ ESP32: OFFLINE';
-        hb.style.color = '#ef4444';
-      }
-
-      // 1. Mode Badge
-      const mb = document.getElementById('mode-badge');
-      mb.innerText = data.mode;
-      mb.className = 'status-badge ' + (
-        data.mode === 'EVACUATE' ? 'badge-evacuate' :
-        data.mode === 'ADVISORY' ? 'badge-advisory' : 'badge-normal'
-      );
-
-      // 2. Aux Siren
-      const anyAlarm = Object.values(data.levels).includes('ALARM') || (data.buz && data.buz.some(b => b > 0));
-      const sirenTag = document.getElementById('aux-siren');
-      sirenTag.innerText = anyAlarm ? '🚨 SIREN: SOUNDING' : 'SIREN: SILENT';
-      sirenTag.className = 'act-tag ' + (anyAlarm ? 'act-hazard' : '');
-
-      // 3. Rooms
-      const rc = document.getElementById('rooms-container');
-      const rooms = ['R1', 'R2', 'R3'];
-      let html = '';
-
-      const man = data.manual || { fans: [null, null, null], strips: [null, null, null] };
-
-      rooms.forEach((r, idx) => {
-        const lvl = data.levels[r] || 'UNKNOWN';
-        const count = data.counts[r] || 0;
-        const assign = data.assign[r];
-        const telem = (data.telemetry && data.telemetry.rooms && data.telemetry.rooms[idx]) ? data.telemetry.rooms[idx] : null;
-
-        const gas = telem ? telem.gr.toFixed(2) + 'x' : '--';
-        const temp = telem && telem.t >= 0 ? telem.t + ' °C' : (telem ? 'Check D3' : '--');
-        const hum = telem && telem.h >= 0 ? telem.h + ' %' : (telem ? 'Check D3' : '--');
-        const flame = telem ? (telem.fl ? '🔥 FLAME' : (lvl === 'ALARM' ? '🔥 ALARM' : 'CLEAR')) : '--';
-
-        const fanRunning = Boolean(data.fans && data.fans[idx]);
-        const stripVal = data.strips ? data.strips[idx] : 0;
-        let ledStatusText = 'OFF';
-        if (stripVal === 1 || stripVal === 2) ledStatusText = 'ROUTE ILLUMINATION';
-        else if (stripVal === 3) ledStatusText = 'DANGER STROBE';
-        else if (stripVal === 4 || stripVal === 5) ledStatusText = 'CAUTION BLINK';
-
-        const routeText = assign ? `🚪 Evacuate via <b>${assign.exit}</b> &nbsp;(Path: ${assign.path.join(' → ')})` : 'No active evacuation guidance';
-
-        let badgeClass = 'badge-normal';
-        if (lvl === 'ALARM') badgeClass = 'badge-evacuate';
-        else if (lvl === 'WARNING') badgeClass = 'badge-advisory';
-        else if (lvl === 'UNKNOWN') badgeClass = '';
-
-        const mFan = man.fans[idx];
-        const mLed = man.strips[idx];
-
-        html += `
-          <div class="room-card" style="border-left: 4px solid ${lvl==='ALARM'?'#ef4444':lvl==='WARNING'?'#f59e0b':'#10b981'};">
-            <div class="room-header">
-              <span class="room-name">${r}</span>
-              <span class="status-badge ${badgeClass}" style="font-size: 0.75rem; padding: 0.2rem 0.6rem;">${lvl}</span>
-            </div>
-            <div class="route-box">${routeText}</div>
-            <div class="room-meta">
-              <div class="meta-box"><div class="meta-label">People</div><div class="meta-val" style="color: #60a5fa;">n = ${count}</div></div>
-              <div class="meta-box"><div class="meta-label">Gas Ratio</div><div class="meta-val">${gas}</div></div>
-              <div class="meta-box"><div class="meta-label">Temp</div><div class="meta-val">${temp}</div></div>
-              <div class="meta-box"><div class="meta-label">Flame</div><div class="meta-val" style="${telem && telem.fl ? 'color:#ef4444;font-weight:800;' : ''}">${flame}</div></div>
-            </div>
-
-            <!-- Manual Overrides for Actuators -->
-            <div class="actuators">
-              <div class="act-row">
-                <span>🌀 <b>Exhaust Fan</b>: <span class="${fanRunning ? 'act-active' : ''}">${fanRunning ? 'RUNNING' : 'OFF'}</span></span>
-                <div class="ctrl-group">
-                  <button class="ctrl-btn ${mFan===null ? 'ctrl-active' : ''}" onclick="setManual('fan', ${idx}, null)">AUTO</button>
-                  <button class="ctrl-btn ${mFan===1 ? 'ctrl-on' : ''}" onclick="setManual('fan', ${idx}, 1)">FORCE ON</button>
-                  <button class="ctrl-btn ${mFan===0 ? 'ctrl-off' : ''}" onclick="setManual('fan', ${idx}, 0)">OFF</button>
-                </div>
-              </div>
-
-              <div class="act-row">
-                <span>💡 <b>6 Red LEDs</b>: <span class="${stripVal===3 ? 'act-hazard' : (stripVal ? 'act-active' : '')}">${ledStatusText}</span></span>
-                <div class="ctrl-group">
-                  <button class="ctrl-btn ${mLed===null ? 'ctrl-active' : ''}" onclick="setManual('led', ${idx}, null)">AUTO</button>
-                  <button class="ctrl-btn ${mLed===1 ? 'ctrl-on' : ''}" onclick="setManual('led', ${idx}, 1)">ON</button>
-                  <button class="ctrl-btn ${mLed===3 ? 'ctrl-strobe' : ''}" onclick="setManual('led', ${idx}, 3)">STROBE</button>
-                  <button class="ctrl-btn ${mLed===0 ? 'ctrl-off' : ''}" onclick="setManual('led', ${idx}, 0)">OFF</button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Simulation Triggers -->
-            <div class="btn-group">
-              <button class="action-btn btn-alarm" onclick="sendAction('ALARM', '${r}')">🔥 Test Fire</button>
-              <button class="action-btn btn-warn" onclick="sendAction('WARNING', '${r}')">⚠️ Test Warning</button>
-              <button class="action-btn" onclick="sendAction('CLEAR', '${r}')">✓ Clear</button>
-            </div>
-          </div>
-        `;
-      });
-      rc.innerHTML = html;
-
-      // 4. Alerts
-      const ac = document.getElementById('alerts-container');
-      const al = document.getElementById('alerts-list');
-      if (data.alerts && data.alerts.length > 0) {
-        ac.style.display = 'block';
-        al.innerHTML = data.alerts.map(a => `<div class="alert-item">⚠️ ${a}</div>`).join('');
-      } else {
-        ac.style.display = 'none';
-      }
-    }
-
-    async function setManual(device, index = 0, value = null) {
-      try {
-        await fetch('/api/manual', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ device, index, value })
-        });
-        fetchState();
-      } catch (e) {
-        console.error("Manual control error:", e);
-      }
-    }
-
-    async function sendAction(action, room = null) {
-      try {
-        await fetch('/api/action', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action, room })
-        });
-        fetchState();
-      } catch (e) {
-        console.error("Action error:", e);
-      }
-    }
-
-    setInterval(fetchState, 500);
-    fetchState();
-  </script>
-</body>
-</html>
-"""
-
-
-@app.get("/")
+@app.get('/')
 def index():
-    return DASHBOARD_HTML
+    return send_file('templates/index.html')
 
 
 def gen_frames():
@@ -439,6 +145,44 @@ def api_action():
             manual_s = [None] * len(C.STRIP_SLOTS)
             reset_until = time.time() + 3.0
     return jsonify({"ok": True, "sim": sim})
+
+
+@app.post("/api/sim")
+def api_sim():
+    global sim_enabled, sync_hardware, sim_counts, sim, reset_until
+    data = request.get_json(force=True) or {}
+    with lock:
+        if "enabled" in data:
+            sim_enabled = bool(data["enabled"])
+        if "sync_hardware" in data:
+            sync_hardware = bool(data["sync_hardware"])
+        if "counts" in data and isinstance(data["counts"], dict):
+            for r, c in data["counts"].items():
+                if r in C.ROOMS:
+                    sim_counts[r] = max(0, int(c))
+        if "fire" in data:
+            r = data["fire"]
+            if r in C.ROOMS:
+                sim[r] = "ALARM"
+        if "warn" in data:
+            r = data["warn"]
+            if r in C.ROOMS:
+                sim[r] = "WARNING"
+        if "clear" in data:
+            r = data["clear"]
+            if r in C.ROOMS:
+                sim[r] = "NORMAL"
+        if data.get("reset"):
+            sim = {r: None for r in C.ROOMS}
+            sim_counts = {r: 10 for r in C.ROOMS}
+            reset_until = time.time() + 3.0
+    return jsonify({
+        "ok": True,
+        "sim_enabled": sim_enabled,
+        "sync_hardware": sync_hardware,
+        "sim": sim,
+        "sim_counts": sim_counts,
+    })
 
 
 @app.post("/telemetry")
@@ -546,8 +290,10 @@ def room_levels():
     t = telemetry
     fresh = t is not None and (now - t.get("rx", 0) <= C.STALE_AFTER_S)
     for r in C.ROOMS:
-        if not fresh:
-            lvl = "NORMAL" if args.sim else "UNKNOWN"
+        if sim_enabled and sim.get(r):
+            lvl = sim[r]
+        elif not fresh:
+            lvl = "NORMAL" if (args.sim or sim_enabled) else "UNKNOWN"
         else:
             idx = C.ROOM_INDEX[r]
             if "rooms" in t and idx < len(t["rooms"]):
@@ -556,9 +302,9 @@ def room_levels():
                 if rd.get("f") and lvl == "NORMAL":
                     lvl = "UNKNOWN"
             else:
-                lvl = "NORMAL" if args.sim else "UNKNOWN"
+                lvl = "NORMAL" if (args.sim or sim_enabled) else "UNKNOWN"
 
-        if sim[r] and RANK[sim[r]] > RANK[lvl]:
+        if sim.get(r) and RANK[sim[r]] > RANK[lvl]:
             lvl = sim[r]
         out[r] = lvl
     return out
@@ -606,8 +352,9 @@ while True:
         vis = np.zeros((canvas_h, C.FRAME_W, 3), np.uint8)
 
     with lock:
+        active_counts = dict(sim_counts) if (sim_enabled and sim_counts) else last_counts
         levels = room_levels()
-        res = planner.plan(levels, last_counts, now)
+        res = planner.plan(levels, active_counts, now)
 
         # Automatic decisions
         auto_s = [res["strips"].get(s, IDLE) for s in C.STRIP_SLOTS]
@@ -628,22 +375,29 @@ while True:
             for i in range(len(C.ROOMS))
         ]
 
-        commands = {
-            "s": final_s,
-            "fan": final_fan,
-            "buz": final_buz,
-        }
+        if not sim_enabled or sync_hardware:
+            commands = {
+                "s": final_s,
+                "fan": final_fan,
+                "buz": final_buz,
+            }
+        else:
+            commands = {
+                "s": [0] * len(C.STRIP_SLOTS),
+                "fan": [0] * len(C.ROOMS),
+                "buz": [0] * len(C.ROOMS),
+            }
 
         # Update global system state for Web UI
         system_state = {
             "mode": res["mode"],
             "levels": levels,
-            "counts": last_counts,
+            "counts": active_counts,
             "assign": res["assign"],
             "alerts": res["alerts"] + ([cam_alert] if cam_alert else []),
-            "fans": commands["fan"],
-            "buz": commands["buz"],
-            "strips": commands["s"],
+            "fans": final_fan,
+            "buz": final_buz,
+            "strips": final_s,
             "manual": {
                 "fans": list(manual_fan),
                 "buz": list(manual_buz),
@@ -651,6 +405,24 @@ while True:
             },
             "telemetry": telemetry,
             "timestamp": now,
+            "sim": {
+                "enabled": sim_enabled,
+                "sync_hardware": sync_hardware,
+                "levels": sim,
+                "counts": sim_counts,
+            },
+            "topology": {
+                "rooms": C.ROOMS,
+                "exits": C.EXITS,
+                "edges": [
+                    {"from": a, "to": b, "len": w, "strip": s}
+                    for a, b, w, s in C.EDGES
+                ],
+                "strip_slots": C.STRIP_SLOTS,
+                "k_congestion": C.CONGESTION_K,
+                "warn_penalty": C.WARN_PENALTY,
+                "counterflow_penalty": C.COUNTERFLOW_PENALTY,
+            }
         }
 
     # ---- HUD overlay ----
@@ -662,7 +434,7 @@ while True:
         a = res["assign"].get(r)
         cv2.putText(
             vis,
-            f"{r} n={last_counts.get(r, 0)}  {levels[r]}",
+            f"{r} n={active_counts.get(r, 0)}  {levels[r]}",
             (10, y),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.6,

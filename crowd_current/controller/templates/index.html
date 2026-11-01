@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Crowd Current — Multi-Node Dynamic Evacuation & Digital Twin Simulator</title>
+  <!-- Local Offline React 18 & Babel Bundle -->
+  <script src="/static/react.min.js"></script>
+  <script src="/static/react-dom.min.js"></script>
+  <script src="/static/babel.min.js"></script>
+  <style>
+    :root {
+      --bg: #070b14;
+      --card-bg: #0d1526;
+      --card-inner: #131e36;
+      --border: #1e2e4f;
+      --border-accent: #2563eb;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --green: #10b981;
+      --green-glow: rgba(16, 185, 129, 0.35);
+      --amber: #f59e0b;
+      --amber-glow: rgba(245, 158, 11, 0.35);
+      --red: #ef4444;
+      --red-glow: rgba(239, 68, 68, 0.45);
+      --blue: #3b82f6;
+      --cyan: #06b6d4;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    body { background-color: var(--bg); color: var(--text); padding: 1.25rem; min-height: 100vh; overflow-x: hidden; }
+
+    /* Top Navigation Bar */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 1rem;
+      margin-bottom: 1.25rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .logo-area { display: flex; align-items: center; gap: 0.85rem; }
+    .logo-badge {
+      width: 40px; height: 40px;
+      background: linear-gradient(135deg, #2563eb, #10b981);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; font-weight: 800; color: #fff;
+      box-shadow: 0 0 15px rgba(37, 99, 235, 0.5);
+    }
+    .brand-title { font-size: 1.35rem; font-weight: 800; letter-spacing: 0.5px; }
+    .brand-subtitle { font-size: 0.78rem; color: var(--text-muted); font-weight: 500; }
+
+    .header-pills { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+    .pill {
+      font-size: 0.78rem; font-weight: 700;
+      padding: 0.35rem 0.8rem; border-radius: 9999px;
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.03);
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .pill-normal { background: rgba(16, 185, 129, 0.15); color: var(--green); border-color: rgba(16, 185, 129, 0.4); }
+    .pill-advisory { background: rgba(245, 158, 11, 0.15); color: var(--amber); border-color: rgba(245, 158, 11, 0.4); }
+    .pill-evacuate {
+      background: rgba(239, 68, 68, 0.2); color: var(--red);
+      border-color: rgba(239, 68, 68, 0.5);
+      animation: pulse-danger 1s infinite alternate;
+    }
+    @keyframes pulse-danger {
+      from { box-shadow: 0 0 5px rgba(239, 68, 68, 0.4); transform: scale(1); }
+      to { box-shadow: 0 0 18px rgba(239, 68, 68, 0.8); transform: scale(1.03); }
+    }
+
+    .btn-action {
+      background: #1e293b; color: #fff; border: 1px solid #334155;
+      padding: 0.4rem 0.85rem; border-radius: 8px; font-size: 0.78rem;
+      font-weight: 700; cursor: pointer; transition: all 0.15s ease;
+      display: inline-flex; align-items: center; gap: 0.4rem;
+    }
+    .btn-action:hover { background: #334155; border-color: #475569; }
+    .btn-sim-active {
+      background: linear-gradient(135deg, #d97706, #b45309) !important;
+      border-color: #f59e0b !important; color: white !important;
+      box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
+    }
+    .btn-sync-active {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+      border-color: #60a5fa !important; color: white !important;
+      box-shadow: 0 0 12px rgba(37, 99, 235, 0.4);
+    }
+    .btn-reset-danger {
+      background: rgba(239, 68, 68, 0.15); color: #fca5a5;
+      border-color: rgba(239, 68, 68, 0.4);
+    }
+    .btn-reset-danger:hover { background: rgba(239, 68, 68, 0.3); }
+
+    /* Layout Grids */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1.25fr 0.95fr;
+      gap: 1.25rem;
+    }
+    @media (max-width: 1200px) {
+      .main-grid { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.2rem;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    .card-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 0.9rem; padding-bottom: 0.6rem;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .card-title {
+      font-size: 1.05rem; font-weight: 700;
+      display: flex; align-items: center; gap: 0.5rem; letter-spacing: 0.3px;
+    }
+
+    /* Simulation Canvas Container */
+    .canvas-container {
+      position: relative; width: 100%; border-radius: 12px;
+      overflow: hidden; background: #050811;
+      border: 1px solid #1a2744;
+      box-shadow: inset 0 0 30px rgba(0,0,0,0.8);
+    }
+    canvas#simCanvas {
+      display: block; width: 100%; height: auto;
+      cursor: crosshair;
+    }
+
+    /* Judge Scenarios Bar */
+    .scenarios-bar {
+      display: flex; gap: 0.5rem; margin-top: 0.85rem;
+      overflow-x: auto; padding-bottom: 0.25rem;
+    }
+    .scenario-btn {
+      background: #111a2e; color: #94a3b8; border: 1px solid #223254;
+      padding: 0.4rem 0.75rem; border-radius: 7px; font-size: 0.74rem;
+      font-weight: 600; cursor: pointer; white-space: nowrap;
+      transition: all 0.15s; display: flex; align-items: center; gap: 0.35rem;
+    }
+    .scenario-btn:hover { background: #1c2b4d; color: #fff; border-color: var(--blue); }
+    .scenario-btn.active {
+      background: rgba(37, 99, 235, 0.25); color: #93c5fd;
+      border-color: #3b82f6; font-weight: 700;
+    }
+
+    /* Simulator Controls Toolbar */
+    .sim-toolbar {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-top: 0.85rem; padding: 0.75rem; border-radius: 8px;
+      background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05);
+    }
+    .toolbar-group { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+
+    /* Telemetry Metrics Bar */
+    .metrics-bar {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 0.65rem; margin-top: 0.85rem;
+    }
+    .metric-box {
+      background: var(--card-inner); padding: 0.65rem;
+      border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);
+      text-align: center;
+    }
+    .metric-label { font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; margin-bottom: 0.2rem; }
+    .metric-val { font-size: 1.15rem; font-weight: 800; }
+
+    /* Right Column: Room Control Cards */
+    .room-card {
+      background: var(--card-inner); border: 1px solid var(--border);
+      border-radius: 10px; padding: 0.9rem; margin-bottom: 0.85rem;
+      transition: all 0.2s ease;
+    }
+    .room-card:last-child { margin-bottom: 0; }
+    .room-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 0.6rem;
+    }
+    .room-title-box { display: flex; align-items: center; gap: 0.5rem; }
+    .room-tag {
+      font-size: 1rem; font-weight: 800; padding: 0.15rem 0.5rem;
+      border-radius: 6px; background: rgba(255,255,255,0.05);
+    }
+    .route-banner {
+      background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.3);
+      padding: 0.45rem 0.7rem; border-radius: 6px; font-size: 0.8rem;
+      color: #93c5fd; margin-bottom: 0.65rem; font-weight: 600;
+    }
+    .sensor-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4rem;
+      margin-bottom: 0.65rem; text-align: center;
+    }
+    .s-box {
+      background: rgba(0,0,0,0.3); padding: 0.4rem; border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.04);
+    }
+    .s-lbl { font-size: 0.62rem; color: var(--text-muted); text-transform: uppercase; }
+    .s-val { font-size: 0.85rem; font-weight: 700; margin-top: 0.15rem; }
+
+    /* Actuator controls row */
+    .act-panel {
+      background: rgba(0,0,0,0.25); padding: 0.55rem 0.7rem; border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.04);
+      display: flex; flex-direction: column; gap: 0.45rem; font-size: 0.78rem;
+    }
+    .act-line { display: flex; justify-content: space-between; align-items: center; }
+    .ctrl-pills { display: inline-flex; border-radius: 5px; overflow: hidden; border: 1px solid #334155; }
+    .ctrl-pill {
+      background: #1e293b; color: #94a3b8; border: none; padding: 0.2rem 0.55rem;
+      font-size: 0.7rem; font-weight: 700; cursor: pointer; transition: all 0.15s;
+      border-right: 1px solid #334155;
+    }
+    .ctrl-pill:last-child { border-right: none; }
+    .ctrl-pill.active { background: #2563eb !important; color: #fff !important; }
+    .ctrl-pill.on { background: #059669 !important; color: #fff !important; }
+    .ctrl-pill.off { background: #dc2626 !important; color: #fff !important; }
+    .ctrl-pill.strobe { background: #d97706 !important; color: #fff !important; }
+
+    /* Judge Math Explainability Table */
+    .math-table {
+      width: 100%; border-collapse: collapse; font-size: 0.75rem;
+      margin-top: 0.5rem; background: rgba(0,0,0,0.2); border-radius: 6px; overflow: hidden;
+    }
+    .math-table th {
+      background: #111a2e; color: var(--text-muted); padding: 0.4rem 0.6rem;
+      text-align: left; font-weight: 600; text-transform: uppercase; font-size: 0.66rem;
+    }
+    .math-table td {
+      padding: 0.45rem 0.6rem; border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .math-table tr:last-child td { border-bottom: none; }
+
+    /* Tooltip / Hint helper */
+    .hint-text { font-size: 0.74rem; color: var(--text-muted); font-style: italic; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- React 18 Application Script with Babel -->
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    function App() {
+      // System state from API
+      const [state, setState] = useState(null);
+      const [isSimMode, setIsSimMode] = useState(false);
+      const [syncHardware, setSyncHardware] = useState(true);
+      const [soundEnabled, setSoundEnabled] = useState(false);
+      const [activeScenario, setActiveScenario] = useState("live");
+      const [evacuatedTotal, setEvacuatedTotal] = useState(0);
+
+      // Local interactive simulation overrides
+      const [simLevels, setSimLevels] = useState({ R1: "NORMAL", R2: "NORMAL", R3: "NORMAL" });
+      const [simCounts, setSimCounts] = useState({ R1: 10, R2: 12, R3: 8 });
+
+      // Audio synthesized siren ref
+      const audioCtxRef = useRef(null);
+      const sirenOscRef = useRef(null);
+
+      // Canvas reference
+      const canvasRef = useRef(null);
+      const agentsRef = useRef([]);
+      const particlesRef = useRef([]);
+      const lastAnimTimeRef = useRef(performance.now());
+
+      // 1. Polling State from Flask backend
+      const fetchState = async () => {
+        try {
+          const res = await fetch('/api/state');
+          const data = await res.json();
+          setState(data);
+
+          // Synchronize sim values if active
+          if (data.sim && data.sim.enabled) {
+            setIsSimMode(true);
+            setSyncHardware(data.sim.sync_hardware !== false);
+          }
+        } catch (err) {
+          console.error("State fetch error:", err);
+        }
+      };
+
+      useEffect(() => {
+        fetchState();
+        const timer = setInterval(fetchState, 400);
+        return () => clearInterval(timer);
+      }, []);
+
+      // 2. Sound Effects (Web Audio API)
+      const toggleSound = () => {
+        if (!soundEnabled) {
+          try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            audioCtxRef.current = ctx;
+            setSoundEnabled(true);
+          } catch (e) {
+            console.error("Audio error:", e);
+          }
+        } else {
+          if (sirenOscRef.current) {
+            try { sirenOscRef.current.stop(); } catch(e){}
+            sirenOscRef.current = null;
+          }
+          setSoundEnabled(false);
+        }
+      };
+
+      // Play Siren when EVACUATE
+      useEffect(() => {
+        if (!soundEnabled || !audioCtxRef.current) return;
+        const ctx = audioCtxRef.current;
+        const mode = state ? state.mode : "NORMAL";
+
+        if (mode === "EVACUATE" && !sirenOscRef.current) {
+          try {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = "sawtooth";
+            osc.frequency.setValueAtTime(650, ctx.currentTime);
+            // Siren pitch wobble
+            osc.frequency.setTargetAtTime(900, ctx.currentTime + 0.3, 0.2);
+            gain.gain.setValueAtTime(0.05, ctx.currentTime);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            sirenOscRef.current = osc;
+          } catch(e) {}
+        } else if (mode !== "EVACUATE" && sirenOscRef.current) {
+          try {
+            sirenOscRef.current.stop();
+          } catch(e){}
+          sirenOscRef.current = null;
+        }
+      }, [state?.mode, soundEnabled]);
+
+      // 3. API Actions
+      const sendSimUpdate = async (patch) => {
+        try {
+          await fetch('/api/sim', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(patch)
+          });
+          fetchState();
+        } catch (e) {
+          console.error("Sim update error:", e);
+        }
+      };
+
+      const setRoomFire = (room, level = "ALARM") => {
+        setIsSimMode(true);
+        const newLevels = { ...simLevels, [room]: level };
+        setSimLevels(newLevels);
+        sendSimUpdate({ enabled: true, [level === "ALARM" ? "fire" : "warn"]: room });
+      };
+
+      const clearRoomHazard = (room) => {
+        const newLevels = { ...simLevels, [room]: "NORMAL" };
+        setSimLevels(newLevels);
+        sendSimUpdate({ clear: room });
+      };
+
+      const resetAllAlarms = async () => {
+        setSimLevels({ R1: "NORMAL", R2: "NORMAL", R3: "NORMAL" });
+        setActiveScenario("live");
+        setIsSimMode(false);
+        try {
+          await fetch('/api/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: "RESET" })
+          });
+          await fetch('/api/sim', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reset: true, enabled: false })
+          });
+          fetchState();
+        } catch (e) {
+          console.error("Reset error:", e);
+        }
+      };
+
+      const setActuatorManual = async (device, index, value) => {
+        try {
+          await fetch('/api/manual', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ device, index, value })
+          });
+          fetchState();
+        } catch(e){}
+      };
+
+      // 4. One-Click Judge Scenarios
+      const loadScenario = (key) => {
+        setActiveScenario(key);
+        if (key === "live") {
+          setIsSimMode(false);
+          sendSimUpdate({ enabled: false, reset: true });
+        } else if (key === "fire_r1") {
+          setIsSimMode(true);
+          setSimLevels({ R1: "ALARM", R2: "NORMAL", R3: "NORMAL" });
+          setSimCounts({ R1: 14, R2: 8, R3: 12 });
+          sendSimUpdate({ enabled: true, fire: "R1", counts: { R1: 14, R2: 8, R3: 12 }, sync_hardware: syncHardware });
+        } else if (key === "fire_r2") {
+          setIsSimMode(true);
+          setSimLevels({ R1: "NORMAL", R2: "ALARM", R3: "NORMAL" });
+          setSimCounts({ R1: 12, R2: 15, R3: 10 });
+          sendSimUpdate({ enabled: true, fire: "R2", counts: { R1: 12, R2: 15, R3: 10 }, sync_hardware: syncHardware });
+        } else if (key === "congestion_e1") {
+          setIsSimMode(true);
+          setSimLevels({ R1: "NORMAL", R2: "NORMAL", R3: "NORMAL" });
+          // Overload R2 to choke E1 and trigger dynamic diversion to E2
+          setSimCounts({ R1: 8, R2: 45, R3: 6 });
+          sendSimUpdate({ enabled: true, warn: "R2", counts: { R1: 8, R2: 45, R3: 6 }, sync_hardware: syncHardware });
+        } else if (key === "dual_fire") {
+          setIsSimMode(true);
+          setSimLevels({ R1: "ALARM", R2: "NORMAL", R3: "ALARM" });
+          setSimCounts({ R1: 10, R2: 16, R3: 8 });
+          sendSimUpdate({ enabled: true, fire: "R1", counts: { R1: 10, R2: 16, R3: 8 }, sync_hardware: syncHardware });
+        }
+      };
+
+      // 5. Canvas Coordinate Map for the Cardboard Layout
+      const nodePos = {
+        R1: { x: 260, y: 350, w: 140, h: 120 },
+        R2: { x: 540, y: 350, w: 150, h: 120 },
+        R3: { x: 380, y: 140, w: 260, h: 110 },
+        E1: { x: 800, y: 350, label: "Exit 1 (E1)" },
+        E2: { x: 400, y: 490, label: "Exit 2 (E2)" },
+        E3: { x: 100, y: 240, label: "Exit 3 (E3)" },
+      };
+
+      // Waypoints along corridors for smooth running path interpolation
+      const getCorridorWaypoints = (from, to) => {
+        if (from === "R1" && to === "E3") return [{ x: 260, y: 350 }, { x: 170, y: 310 }, { x: 100, y: 240 }];
+        if (from === "E3" && to === "R1") return [{ x: 100, y: 240 }, { x: 170, y: 310 }, { x: 260, y: 350 }];
+        if (from === "R1" && to === "E2") return [{ x: 260, y: 350 }, { x: 320, y: 440 }, { x: 400, y: 490 }];
+        if (from === "R1" && to === "R2") return [{ x: 260, y: 350 }, { x: 400, y: 350 }, { x: 540, y: 350 }];
+        if (from === "R2" && to === "R1") return [{ x: 540, y: 350 }, { x: 400, y: 350 }, { x: 260, y: 350 }];
+        if (from === "R2" && to === "E1") return [{ x: 540, y: 350 }, { x: 670, y: 350 }, { x: 800, y: 350 }];
+        if (from === "R2" && to === "E2") return [{ x: 540, y: 350 }, { x: 470, y: 440 }, { x: 400, y: 490 }];
+        if (from === "R3" && to === "E3") return [{ x: 380, y: 140 }, { x: 220, y: 170 }, { x: 100, y: 240 }];
+        if (from === "R3" && to === "E1") return [{ x: 380, y: 140 }, { x: 600, y: 120 }, { x: 750, y: 220 }, { x: 800, y: 350 }];
+        return [{ x: nodePos[from].x, y: nodePos[from].y }, { x: nodePos[to].x, y: nodePos[to].y }];
+      };
+
+      // 6. 60 FPS Particle Engine & Digital Twin Renderer
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
+        let animId;
+
+        const render = (time) => {
+          const dt = Math.min((time - lastAnimTimeRef.current) / 1000, 0.1);
+          lastAnimTimeRef.current = time;
+
+          // Clear background
+          ctx.fillStyle = "#070c17";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+          // Draw architectural blueprint grid
+          ctx.strokeStyle = "rgba(30, 48, 80, 0.45)";
+          ctx.lineWidth = 1;
+          for (let x = 0; x < canvas.width; x += 30) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+          }
+          for (let y = 0; y < canvas.height; y += 30) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+          }
+
+          const currentMode = state?.mode || "NORMAL";
+          const currentLevels = state?.levels || simLevels;
+          const currentAssign = state?.assign || {};
+          const currentFans = state?.fans || [0, 0, 0];
+          const currentStrips = state?.strips || [0, 0, 0, 0];
+
+          // ---- A. DRAW CORRIDORS (EDGES & LED STRIPS) ----
+          const edges = [
+            { from: "R1", to: "E3", len: 30, stripIdx: 0, stripName: "L1", pts: [{x:260,y:350},{x:170,y:310},{x:100,y:240}] },
+            { from: "R1", to: "E2", len: 45, stripIdx: -1, stripName: null, pts: [{x:260,y:350},{x:320,y:440},{x:400,y:490}] },
+            { from: "R1", to: "R2", len: 25, stripIdx: 3, stripName: "L4", pts: [{x:260,y:350},{x:400,y:350},{x:540,y:350}] },
+            { from: "R2", to: "E1", len: 30, stripIdx: 1, stripName: "L2", pts: [{x:540,y:350},{x:670,y:350},{x:800,y:350}] },
+            { from: "R2", to: "E2", len: 40, stripIdx: -1, stripName: null, pts: [{x:540,y:350},{x:470,y:440},{x:400,y:490}] },
+            { from: "R3", to: "E3", len: 35, stripIdx: -1, stripName: null, pts: [{x:380,y:140},{x:220,y:170},{x:100,y:240}] },
+            { from: "R3", to: "E1", len: 70, stripIdx: 2, stripName: "L3", pts: [{x:380,y:140},{x:600,y:120},{x:750,y:220},{x:800,y:350}] },
+          ];
+
+          edges.forEach((e) => {
+            // Draw conduit tube
+            ctx.beginPath();
+            ctx.moveTo(e.pts[0].x, e.pts[0].y);
+            for (let i = 1; i < e.pts.length; i++) ctx.lineTo(e.pts[i].x, e.pts[i].y);
+            ctx.lineWidth = 18;
+            ctx.strokeStyle = "rgba(18, 30, 52, 0.75)";
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+            ctx.stroke();
+
+            // Inner glass rail
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = "rgba(40, 65, 110, 0.4)";
+            ctx.stroke();
+
+            // LED Strip lighting rendering
+            let stripState = 0;
+            if (e.stripIdx >= 0 && currentStrips[e.stripIdx] !== undefined) {
+              stripState = currentStrips[e.stripIdx];
+            }
+
+            // Draw glowing LED dots along the conduit
+            const totalDots = 14;
+            for (let d = 0; d <= totalDots; d++) {
+              const u = d / totalDots;
+              // Simple segment interpolation
+              let pt;
+              if (e.pts.length === 3) {
+                if (u < 0.5) {
+                  const t = u * 2;
+                  pt = { x: e.pts[0].x + (e.pts[1].x - e.pts[0].x)*t, y: e.pts[0].y + (e.pts[1].y - e.pts[0].y)*t };
+                } else {
+                  const t = (u - 0.5) * 2;
+                  pt = { x: e.pts[1].x + (e.pts[2].x - e.pts[1].x)*t, y: e.pts[1].y + (e.pts[2].y - e.pts[1].y)*t };
+                }
+              } else if (e.pts.length === 4) {
+                const seg = Math.min(Math.floor(u * 3), 2);
+                const t = (u - seg/3) * 3;
+                pt = { x: e.pts[seg].x + (e.pts[seg+1].x - e.pts[seg].x)*t, y: e.pts[seg].y + (e.pts[seg+1].y - e.pts[seg].y)*t };
+              } else {
+                pt = { x: e.pts[0].x + (e.pts[1].x - e.pts[0].x)*u, y: e.pts[0].y + (e.pts[1].y - e.pts[0].y)*u };
+              }
+
+              // Color determination
+              ctx.beginPath();
+              ctx.arc(pt.x, pt.y, 3, 0, Math.PI * 2);
+
+              if (stripState === 1) { // Forward Green Run
+                const wave = ((time * 0.003 - u * 3) % 1 + 1) % 1;
+                ctx.fillStyle = wave > 0.6 ? "#10b981" : "rgba(16, 185, 129, 0.25)";
+                ctx.shadowColor = "#10b981"; ctx.shadowBlur = wave > 0.6 ? 10 : 0;
+              } else if (stripState === 2) { // Reverse Green Run
+                const wave = ((time * 0.003 + u * 3) % 1 + 1) % 1;
+                ctx.fillStyle = wave > 0.6 ? "#10b981" : "rgba(16, 185, 129, 0.25)";
+                ctx.shadowColor = "#10b981"; ctx.shadowBlur = wave > 0.6 ? 10 : 0;
+              } else if (stripState === 3) { // Rapid Red Strobe
+                const blink = Math.floor(time / 130) % 2 === 0;
+                ctx.fillStyle = blink ? "#ef4444" : "rgba(239, 68, 68, 0.1)";
+                ctx.shadowColor = "#ef4444"; ctx.shadowBlur = blink ? 14 : 0;
+              } else if (stripState === 4 || stripState === 5) { // Amber Caution
+                const pulse = Math.sin(time * 0.006) * 0.5 + 0.5;
+                ctx.fillStyle = `rgba(245, 158, 11, ${0.3 + pulse * 0.7})`;
+                ctx.shadowColor = "#f59e0b"; ctx.shadowBlur = 6;
+              } else {
+                ctx.fillStyle = "rgba(100, 140, 190, 0.25)";
+                ctx.shadowBlur = 0;
+              }
+              ctx.fill();
+              ctx.shadowBlur = 0;
+            }
+
+            // Corridor length label
+            const mid = e.pts[Math.floor(e.pts.length / 2)];
+            ctx.font = "10px sans-serif";
+            ctx.fillStyle = "rgba(148, 163, 184, 0.6)";
+            ctx.textAlign = "center";
+            ctx.fillText(`${e.len}cm ${e.stripName ? '('+e.stripName+')' : ''}`, mid.x, mid.y - 12);
+          });
+
+          // ---- B. DRAW ROOM NODES ----
+          const rooms = ["R1", "R2", "R3"];
+          rooms.forEach((r, idx) => {
+            const p = nodePos[r];
+            const lvl = currentLevels[r] || "NORMAL";
+            const isAlarm = lvl === "ALARM";
+            const isWarn = lvl === "WARNING" || lvl === "UNKNOWN";
+
+            // Room Background Box
+            ctx.beginPath();
+            ctx.roundRect(p.x - p.w/2, p.y - p.h/2, p.w, p.h, 12);
+            ctx.fillStyle = isAlarm ? "rgba(239, 68, 68, 0.12)" : isWarn ? "rgba(245, 158, 11, 0.08)" : "rgba(19, 30, 54, 0.85)";
+            ctx.fill();
+
+            // Border glow
+            ctx.lineWidth = isAlarm ? 3 : 2;
+            ctx.strokeStyle = isAlarm ? "#ef4444" : isWarn ? "#f59e0b" : "rgba(59, 130, 246, 0.5)";
+            if (isAlarm) { ctx.shadowColor = "#ef4444"; ctx.shadowBlur = 18; }
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // Room Title
+            ctx.font = "bold 16px sans-serif";
+            ctx.fillStyle = "#fff";
+            ctx.textAlign = "left";
+            ctx.fillText(r, p.x - p.w/2 + 14, p.y - p.h/2 + 24);
+
+            // Level Pill inside room
+            ctx.font = "bold 10px sans-serif";
+            ctx.fillStyle = isAlarm ? "#f87171" : isWarn ? "#fbbf24" : "#34d399";
+            ctx.fillText(lvl, p.x - p.w/2 + 46, p.y - p.h/2 + 24);
+
+            // Gas & Temp Telemetry
+            const telem = state?.telemetry?.rooms ? state.telemetry.rooms[idx] : null;
+            const gasStr = telem ? `${telem.gr.toFixed(2)}x` : "1.00x";
+            const tempStr = telem && telem.t >= 0 ? `${telem.t}°C` : (isAlarm ? "45°C" : "26°C");
+
+            ctx.font = "11px monospace";
+            ctx.fillStyle = "#94a3b8";
+            ctx.fillText(`Gas: ${gasStr} | Temp: ${tempStr}`, p.x - p.w/2 + 14, p.y + p.h/2 - 14);
+
+            // Exhaust Fan Spinner (top-right of room)
+            const fanX = p.x + p.w/2 - 24;
+            const fanY = p.y - p.h/2 + 22;
+            const fanOn = Boolean(currentFans[idx]);
+
+            ctx.save();
+            ctx.translate(fanX, fanY);
+            if (fanOn) ctx.rotate(time * 0.015);
+            ctx.beginPath();
+            ctx.arc(0, 0, 10, 0, Math.PI * 2);
+            ctx.strokeStyle = fanOn ? "#10b981" : "#475569";
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            // Fan blades
+            for (let b = 0; b < 4; b++) {
+              ctx.rotate(Math.PI / 2);
+              ctx.beginPath();
+              ctx.moveTo(0, 0);
+              ctx.lineTo(7, 3);
+              ctx.stroke();
+            }
+            ctx.restore();
+
+            if (fanOn) {
+              ctx.font = "9px sans-serif";
+              ctx.fillStyle = "#10b981";
+              ctx.textAlign = "right";
+              ctx.fillText("FAN ON", fanX - 14, fanY + 3);
+            }
+
+            // ---- Fire Particles Generation inside Alarm Rooms ----
+            if (isAlarm && Math.random() < 0.6) {
+              particlesRef.current.push({
+                x: p.x - p.w/2 + 15 + Math.random() * (p.w - 30),
+                y: p.y + p.h/2 - 20,
+                vx: (Math.random() - 0.5) * 1.5,
+                vy: -(Math.random() * 2.5 + 1.5),
+                life: 1.0,
+                maxLife: Math.random() * 0.6 + 0.4,
+                size: Math.random() * 8 + 4,
+                type: Math.random() < 0.4 ? "smoke" : "fire"
+              });
+            }
+          });
+
+          // ---- C. DRAW EXITS (E1, E2, E3) ----
+          ["E1", "E2", "E3"].forEach((e) => {
+            const p = nodePos[e];
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 22, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(16, 185, 129, 0.2)";
+            ctx.fill();
+            ctx.lineWidth = 2.5;
+            ctx.strokeStyle = "#10b981";
+            ctx.shadowColor = "#10b981";
+            ctx.shadowBlur = 12;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // Door Icon inside
+            ctx.font = "bold 12px sans-serif";
+            ctx.fillStyle = "#fff";
+            ctx.textAlign = "center";
+            ctx.fillText("🚪", p.x, p.y + 4);
+
+            ctx.font = "bold 11px sans-serif";
+            ctx.fillStyle = "#6ee7b7";
+            ctx.fillText(e, p.x, p.y + 36);
+          });
+
+          // ---- D. UPDATE & DRAW FIRE/SMOKE PARTICLES ----
+          for (let i = particlesRef.current.length - 1; i >= 0; i--) {
+            const prt = particlesRef.current[i];
+            prt.x += prt.vx;
+            prt.y += prt.vy;
+            prt.life -= dt / prt.maxLife;
+
+            if (prt.life <= 0) {
+              particlesRef.current.splice(i, 1);
+              continue;
+            }
+
+            ctx.beginPath();
+            ctx.arc(prt.x, prt.y, prt.size * prt.life, 0, Math.PI * 2);
+            if (prt.type === "fire") {
+              const alpha = prt.life * 0.8;
+              ctx.fillStyle = prt.life > 0.5 ? `rgba(255, 180, 0, ${alpha})` : `rgba(239, 68, 68, ${alpha})`;
+            } else {
+              ctx.fillStyle = `rgba(120, 130, 145, ${prt.life * 0.35})`;
+            }
+            ctx.fill();
+          }
+
+          // ---- E. AUTONOMOUS RUNNING PEOPLE AGENTS ----
+          const targetTotalAgents = isSimMode
+            ? ((simCounts.R1 || 0) + (simCounts.R2 || 0) + (simCounts.R3 || 0))
+            : (state ? ((state.counts.R1 || 0) + (state.counts.R2 || 0) + (state.counts.R3 || 0)) : 20);
+
+          // Spawn or replenish agents
+          if (agentsRef.current.length < targetTotalAgents && Math.random() < 0.25) {
+            // Pick room with deficit
+            const rKeys = ["R1", "R2", "R3"];
+            const chosenRoom = rKeys[Math.floor(Math.random() * rKeys.length)];
+            const rPos = nodePos[chosenRoom];
+            agentsRef.current.push({
+              room: chosenRoom,
+              x: rPos.x - rPos.w/3 + Math.random() * (rPos.w * 0.6),
+              y: rPos.y - rPos.h/3 + Math.random() * (rPos.h * 0.6),
+              pathIdx: 0,
+              waypoints: null,
+              speed: 1.5 + Math.random() * 0.6,
+              color: "#38bdf8",
+              trail: []
+            });
+          }
+
+          // Cap max agents
+          if (agentsRef.current.length > targetTotalAgents) {
+            agentsRef.current.splice(0, agentsRef.current.length - targetTotalAgents);
+          }
+
+          // Update & draw agents
+          agentsRef.current.forEach((ag, agIdx) => {
+            const isAssigned = currentAssign[ag.room];
+            const isHazard = currentLevels[ag.room] === "ALARM";
+
+            // Determine route waypoints
+            if (isAssigned && isAssigned.path && isAssigned.path.length >= 2) {
+              const pathNodes = isAssigned.path; // e.g. ["R1", "E3"] or ["R1", "R2", "E1"]
+              if (!ag.waypoints || ag.targetExit !== isAssigned.exit) {
+                ag.targetExit = isAssigned.exit;
+                let fullPts = [];
+                for (let k = 0; k < pathNodes.length - 1; k++) {
+                  const seg = getCorridorWaypoints(pathNodes[k], pathNodes[k+1]);
+                  fullPts = fullPts.concat(k === 0 ? seg : seg.slice(1));
+                }
+                ag.waypoints = fullPts;
+                ag.pathIdx = 0;
+              }
+            } else {
+              ag.waypoints = null;
+            }
+
+            // Move agent
+            if (ag.waypoints && ag.pathIdx < ag.waypoints.length) {
+              const target = ag.waypoints[ag.pathIdx];
+              const dx = target.x - ag.x;
+              const dy = target.y - ag.y;
+              const dist = Math.hypot(dx, dy);
+
+              // Evacuation sprint speed
+              const runSpeed = (isHazard ? 4.2 : 2.8) * (ag.speed || 2.0);
+
+              if (dist < 8) {
+                ag.pathIdx++;
+                if (ag.pathIdx >= ag.waypoints.length) {
+                  // Reached Exit!
+                  setEvacuatedTotal((prev) => prev + 1);
+                  // Recycle agent back to random room
+                  const rPos = nodePos[ag.room];
+                  ag.x = rPos.x - rPos.w/4 + Math.random() * (rPos.w/2);
+                  ag.y = rPos.y - rPos.h/4 + Math.random() * (rPos.h/2);
+                  ag.pathIdx = 0;
+                  ag.trail = [];
+                }
+              } else {
+                ag.x += (dx / dist) * runSpeed;
+                ag.y += (dy / dist) * runSpeed;
+              }
+            } else {
+              // Casual wandering inside the room when mode is normal
+              const rPos = nodePos[ag.room];
+              ag.x += (Math.random() - 0.5) * 1.0;
+              ag.y += (Math.random() - 0.5) * 1.0;
+              ag.x = Math.max(rPos.x - rPos.w/2 + 10, Math.min(rPos.x + rPos.w/2 - 10, ag.x));
+              ag.y = Math.max(rPos.y - rPos.h/2 + 10, Math.min(rPos.y + rPos.h/2 - 10, ag.y));
+            }
+
+            // Draw motion trail
+            ag.trail.push({ x: ag.x, y: ag.y });
+            if (ag.trail.length > 6) ag.trail.shift();
+
+            ctx.beginPath();
+            ctx.moveTo(ag.trail[0].x, ag.trail[0].y);
+            for (let t = 1; t < ag.trail.length; t++) ctx.lineTo(ag.trail[t].x, ag.trail[t].y);
+            ctx.strokeStyle = isHazard ? "rgba(239, 68, 68, 0.4)" : "rgba(56, 189, 248, 0.35)";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Draw person token
+            ctx.beginPath();
+            ctx.arc(ag.x, ag.y, isHazard ? 5 : 4, 0, Math.PI * 2);
+            ctx.fillStyle = isHazard ? "#f87171" : currentMode === "EVACUATE" ? "#34d399" : "#38bdf8";
+            ctx.shadowColor = ctx.fillStyle;
+            ctx.shadowBlur = 6;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+          });
+
+          animId = requestAnimationFrame(render);
+        };
+
+        animId = requestAnimationFrame(render);
+        return () => cancelAnimationFrame(animId);
+      }, [state, simLevels, simCounts, isSimMode]);
+
+      // Canvas click to interactively ignite fire or spawn people
+      const handleCanvasClick = (e) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const clickX = (e.clientX - rect.left) * scaleX;
+        const clickY = (e.clientY - rect.top) * scaleY;
+
+        // Check if clicked in any room
+        ["R1", "R2", "R3"].forEach((r) => {
+          const p = nodePos[r];
+          if (
+            clickX >= p.x - p.w/2 && clickX <= p.x + p.w/2 &&
+            clickY >= p.y - p.h/2 && clickY <= p.y + p.h/2
+          ) {
+            // Toggle fire in that room!
+            const isCurrentlyAlarm = (simLevels[r] === "ALARM");
+            if (isCurrentlyAlarm) {
+              clearRoomHazard(r);
+            } else {
+              setRoomFire(r, "ALARM");
+            }
+          }
+        });
+      };
+
+      const mode = state?.mode || "NORMAL";
+      const pillClass = mode === "EVACUATE" ? "pill-evacuate" : mode === "ADVISORY" ? "pill-advisory" : "pill-normal";
+
+      return (
+        <div>
+          {/* Top Header */}
+          <header className="header">
+            <div className="logo-area">
+              <div className="logo-badge">⚡</div>
+              <div>
+                <h1 className="brand-title">CROWD CURRENT</h1>
+                <p className="brand-subtitle">Multi-Node Congestion-Aware Evacuation & Digital Twin Simulator</p>
+              </div>
+            </div>
+
+            <div className="header-pills">
+              <span className={`pill ${pillClass}`}>
+                {mode === "EVACUATE" ? "🚨 EVACUATION ACTIVE" : mode === "ADVISORY" ? "⚠️ ADVISORY WARNING" : "✅ NORMAL STANDBY"}
+              </span>
+
+              <span className="pill" style={{ color: "#34d399", borderColor: "rgba(52, 211, 153, 0.4)" }}>
+                ⚡ ESP32: {state?.telemetry ? "LIVE (COM3)" : "OFFLINE"}
+              </span>
+
+              <button
+                className={`btn-action ${isSimMode ? "btn-sim-active" : ""}`}
+                onClick={() => {
+                  const next = !isSimMode;
+                  setIsSimMode(next);
+                  sendSimUpdate({ enabled: next });
+                }}
+              >
+                🎮 {isSimMode ? "SIMULATOR: ACTIVE" : "SIMULATOR: OFF"}
+              </button>
+
+              <button
+                className={`btn-action ${syncHardware ? "btn-sync-active" : ""}`}
+                onClick={() => {
+                  const next = !syncHardware;
+                  setSyncHardware(next);
+                  sendSimUpdate({ sync_hardware: next });
+                }}
+                title="When ON, simulation commands trigger physical ESP32 relays (Fans) & LED Strips"
+              >
+                ⚡ {syncHardware ? "HW RELAYS: SYNCED" : "HW RELAYS: ISOLATED"}
+              </button>
+
+              <button
+                className={`btn-action ${soundEnabled ? "btn-sync-active" : ""}`}
+                onClick={toggleSound}
+              >
+                {soundEnabled ? "🔊 AUDIO: ON" : "🔇 AUDIO: MUTED"}
+              </button>
+
+              <button className="btn-action btn-reset-danger" onClick={resetAllAlarms}>
+                ↺ RESET ALARMS
+              </button>
+            </div>
+          </header>
+
+          {/* Main Grid: Left = Canvas Digital Twin, Right = Controls & Telemetry */}
+          <div className="main-grid">
+            {/* Left Column: Canvas + Scenarios */}
+            <div>
+              <div className="card">
+                <div className="card-header">
+                  <div className="card-title">
+                    <span>🏢 Real-Time Digital Twin & Evacuation Flow</span>
+                    <span style={{ fontSize: "0.72rem", color: "var(--cyan)", fontWeight: "normal" }}>
+                      ● 60 FPS Particle Crowd Physics
+                    </span>
+                  </div>
+                  <span className="hint-text">💡 Click any room to ignite / extinguish fire</span>
+                </div>
+
+                {/* The 2D Floorplan Canvas */}
+                <div className="canvas-container">
+                  <canvas
+                    id="simCanvas"
+                    ref={canvasRef}
+                    width={960}
+                    height={540}
+                    onClick={handleCanvasClick}
+                  />
+                </div>
+
+                {/* Judge 1-Click Demo Scenarios */}
+                <div className="scenarios-bar">
+                  <span style={{ fontSize: "0.74rem", fontWeight: "700", color: "#cbd5e1", alignSelf: "center", marginRight: "4px" }}>
+                    ⚖️ JUDGE DEMOS:
+                  </span>
+                  <button
+                    className={`scenario-btn ${activeScenario === "live" ? "active" : ""}`}
+                    onClick={() => loadScenario("live")}
+                  >
+                    🟢 1. Live Hardware Mirror
+                  </button>
+                  <button
+                    className={`scenario-btn ${activeScenario === "fire_r1" ? "active" : ""}`}
+                    onClick={() => loadScenario("fire_r1")}
+                  >
+                    🔥 2. Fire in Room 1 (Exit E3)
+                  </button>
+                  <button
+                    className={`scenario-btn ${activeScenario === "fire_r2" ? "active" : ""}`}
+                    onClick={() => loadScenario("fire_r2")}
+                  >
+                    🔥 3. Fire in Room 2 (Cutoff L4)
+                  </button>
+                  <button
+                    className={`scenario-btn ${activeScenario === "congestion_e1" ? "active" : ""}`}
+                    onClick={() => loadScenario("congestion_e1")}
+                  >
+                    👥 4. Exit 1 Bottleneck Reroute
+                  </button>
+                  <button
+                    className={`scenario-btn ${activeScenario === "dual_fire" ? "active" : ""}`}
+                    onClick={() => loadScenario("dual_fire")}
+                  >
+                    🚨 5. Multi-Room Emergency
+                  </button>
+                </div>
+
+                {/* Simulator Crowd Speed & Density Controls */}
+                <div className="sim-toolbar">
+                  <div className="toolbar-group">
+                    <span style={{ fontSize: "0.76rem", fontWeight: "700", color: "#94a3b8" }}>CROWD POPULATION:</span>
+                    <button
+                      className="btn-action"
+                      style={{ padding: "0.2rem 0.5rem" }}
+                      onClick={() => {
+                        const newC = { R1: simCounts.R1 + 5, R2: simCounts.R2 + 5, R3: simCounts.R3 + 5 };
+                        setSimCounts(newC);
+                        sendSimUpdate({ counts: newC });
+                      }}
+                    >
+                      + 15 People
+                    </button>
+                    <button
+                      className="btn-action"
+                      style={{ padding: "0.2rem 0.5rem" }}
+                      onClick={() => {
+                        const newC = { R1: Math.max(0, simCounts.R1 - 5), R2: Math.max(0, simCounts.R2 - 5), R3: Math.max(0, simCounts.R3 - 5) };
+                        setSimCounts(newC);
+                        sendSimUpdate({ counts: newC });
+                      }}
+                    >
+                      - 15 People
+                    </button>
+                  </div>
+
+                  <div className="toolbar-group">
+                    <span style={{ fontSize: "0.76rem", color: "#94a3b8" }}>HAZARD INJECTION:</span>
+                    <button className="btn-action" style={{ background: "rgba(239, 68, 68, 0.2)", borderColor: "rgba(239, 68, 68, 0.4)", color: "#fca5a5" }} onClick={() => setRoomFire("R1")}>
+                      🔥 Fire R1
+                    </button>
+                    <button className="btn-action" style={{ background: "rgba(239, 68, 68, 0.2)", borderColor: "rgba(239, 68, 68, 0.4)", color: "#fca5a5" }} onClick={() => setRoomFire("R2")}>
+                      🔥 Fire R2
+                    </button>
+                    <button className="btn-action" style={{ background: "rgba(239, 68, 68, 0.2)", borderColor: "rgba(239, 68, 68, 0.4)", color: "#fca5a5" }} onClick={() => setRoomFire("R3")}>
+                      🔥 Fire R3
+                    </button>
+                  </div>
+                </div>
+
+                {/* Metrics Bar */}
+                <div className="metrics-bar">
+                  <div className="metric-box">
+                    <div className="metric-label">Total Evacuated</div>
+                    <div className="metric-val" style={{ color: "#34d399" }}>{evacuatedTotal} <span style={{fontSize: "0.7rem"}}>agents</span></div>
+                  </div>
+                  <div className="metric-box">
+                    <div className="metric-label">Active Flow Rate</div>
+                    <div className="metric-val" style={{ color: "#60a5fa" }}>{mode === "EVACUATE" ? "18" : "4"} <span style={{fontSize: "0.7rem"}}>p/min</span></div>
+                  </div>
+                  <div className="metric-box">
+                    <div className="metric-label">Dijkstra Status</div>
+                    <div className="metric-val" style={{ color: mode === "EVACUATE" ? "#f87171" : "#a78bfa" }}>
+                      {mode === "EVACUATE" ? "REROUTED" : "OPTIMAL"}
+                    </div>
+                  </div>
+                  <div className="metric-box">
+                    <div className="metric-label">Relay Actuators</div>
+                    <div className="metric-val" style={{ color: "#f59e0b" }}>
+                      {state?.fans ? state.fans.filter(f => f > 0).length : 0} <span style={{fontSize: "0.7rem"}}>Fans ON</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dijkstra Mathematical Proof Table for Judges */}
+              <div className="card" style={{ marginTop: "1.25rem" }}>
+                <div className="card-header">
+                  <div className="card-title">
+                    <span>📐 Dijkstra Optimization Proof & Congestion Math (For Judges)</span>
+                  </div>
+                  <span style={{ fontSize: "0.72rem", color: "#94a3b8" }}>
+                    Cost = Distance + HazardPenalty + K * (Load / Capacity)
+                  </span>
+                </div>
+
+                <table className="math-table">
+                  <thead>
+                    <tr>
+                      <th>Room</th>
+                      <th>Hazard Level</th>
+                      <th>Assigned Exit</th>
+                      <th>Physical Path</th>
+                      <th>Congestion Score</th>
+                      <th>Decision Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {["R1", "R2", "R3"].map((r) => {
+                      const assign = state?.assign ? state.assign[r] : null;
+                      const lvl = (state?.levels ? state.levels[r] : simLevels[r]) || "NORMAL";
+                      return (
+                        <tr key={r}>
+                          <td style={{ fontWeight: "bold", color: "#fff" }}>{r}</td>
+                          <td>
+                            <span style={{
+                              padding: "0.15rem 0.4rem", borderRadius: "4px", fontSize: "0.7rem", fontWeight: "bold",
+                              background: lvl === "ALARM" ? "rgba(239, 68, 68, 0.2)" : lvl === "WARNING" ? "rgba(245, 158, 11, 0.2)" : "rgba(16, 185, 129, 0.15)",
+                              color: lvl === "ALARM" ? "#fca5a5" : lvl === "WARNING" ? "#fde68a" : "#6ee7b7"
+                            }}>
+                              {lvl}
+                            </span>
+                          </td>
+                          <td style={{ fontWeight: "bold", color: "#93c5fd" }}>
+                            {assign ? assign.exit : "--"}
+                          </td>
+                          <td style={{ fontFamily: "monospace", color: "#cbd5e1" }}>
+                            {assign ? assign.path.join(" → ") : "Standby"}
+                          </td>
+                          <td style={{ fontFamily: "monospace", fontWeight: "bold", color: "#fbbf24" }}>
+                            {assign ? `${assign.score} cm` : "--"}
+                          </td>
+                          <td style={{ fontSize: "0.7rem", color: "#94a3b8" }}>
+                            {lvl === "ALARM"
+                              ? "Room on fire: immediate escape via nearest safe exit"
+                              : assign && assign.exit === "E1"
+                              ? "Shortest unobstructed corridor to Exit 1"
+                              : assign && assign.exit === "E2"
+                              ? "Exit 1 congested: traffic diverted to Exit 2"
+                              : "Safe corridor to Exit 3"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Right Column: Room Controls, Live Hardware Sensors & Camera Feed */}
+            <div>
+              <div className="card">
+                <div className="card-header">
+                  <div className="card-title">
+                    <span>🎛️ Room Nodes & Hardware Telemetry</span>
+                  </div>
+                  <span className="hint-text">Synced with ESP32 COM3 & 4-Relay Module</span>
+                </div>
+
+                {["R1", "R2", "R3"].map((r, idx) => {
+                  const lvl = (state?.levels ? state.levels[r] : simLevels[r]) || "NORMAL";
+                  const telem = (state?.telemetry?.rooms && state.telemetry.rooms[idx]) ? state.telemetry.rooms[idx] : null;
+                  const assign = state?.assign ? state.assign[r] : null;
+                  const fanOn = state?.fans ? Boolean(state.fans[idx]) : false;
+                  const stripVal = state?.strips ? state.strips[idx] : 0;
+                  const count = isSimMode ? (simCounts[r] || 0) : (state?.counts ? state.counts[r] : 0);
+
+                  const mFan = state?.manual?.fans ? state.manual.fans[idx] : null;
+                  const mLed = state?.manual?.strips ? state.manual.strips[idx] : null;
+
+                  let ledModeStr = "OFF";
+                  if (stripVal === 1 || stripVal === 2) ledModeStr = "SOLID GREEN (RUN)";
+                  else if (stripVal === 3) ledModeStr = "STROBE RED (DANGER)";
+                  else if (stripVal === 4 || stripVal === 5) ledModeStr = "PULSE AMBER (CAUTION)";
+
+                  return (
+                    <div
+                      key={r}
+                      className="room-card"
+                      style={{
+                        borderLeft: `4px solid ${lvl === "ALARM" ? "#ef4444" : lvl === "WARNING" ? "#f59e0b" : "#10b981"}`
+                      }}
+                    >
+                      <div className="room-header">
+                        <div className="room-title-box">
+                          <span className="room-tag">{r}</span>
+                          <span style={{ fontSize: "0.78rem", fontWeight: "700", color: lvl === "ALARM" ? "#f87171" : lvl === "WARNING" ? "#fbbf24" : "#34d399" }}>
+                            {lvl}
+                          </span>
+                        </div>
+
+                        {/* Fire & Smoke Trigger Pills */}
+                        <div style={{ display: "flex", gap: "0.3rem" }}>
+                          <button
+                            className="btn-action"
+                            style={{ padding: "0.15rem 0.45rem", fontSize: "0.68rem", background: "rgba(239, 68, 68, 0.2)", color: "#fca5a5" }}
+                            onClick={() => setRoomFire(r, "ALARM")}
+                          >
+                            🔥 Fire
+                          </button>
+                          <button
+                            className="btn-action"
+                            style={{ padding: "0.15rem 0.45rem", fontSize: "0.68rem", background: "rgba(245, 158, 11, 0.2)", color: "#fde68a" }}
+                            onClick={() => setRoomFire(r, "WARNING")}
+                          >
+                            💨 Smoke
+                          </button>
+                          <button
+                            className="btn-action"
+                            style={{ padding: "0.15rem 0.45rem", fontSize: "0.68rem" }}
+                            onClick={() => clearRoomHazard(r)}
+                          >
+                            ✓ Clear
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Route Banner */}
+                      <div className="route-banner">
+                        {assign
+                          ? `🚪 Evacuate via ${assign.exit}  (Path: ${assign.path.join(" → ")})`
+                          : "No active evacuation guidance"}
+                      </div>
+
+                      {/* Sensor Readings Grid */}
+                      <div className="sensor-grid">
+                        <div className="s-box">
+                          <div className="s-lbl">People</div>
+                          <div className="s-val" style={{ color: "#60a5fa" }}>n = {count}</div>
+                        </div>
+                        <div className="s-box">
+                          <div className="s-lbl">Gas Ratio</div>
+                          <div className="s-val">{telem ? `${telem.gr.toFixed(2)}x` : "1.00x"}</div>
+                        </div>
+                        <div className="s-box">
+                          <div className="s-lbl">Temp</div>
+                          <div className="s-val">{telem && telem.t >= 0 ? `${telem.t} °C` : (lvl==="ALARM"?"42°C":"26°C")}</div>
+                        </div>
+                        <div className="s-box">
+                          <div className="s-lbl">Flame Sensor</div>
+                          <div className="s-val" style={{ color: (lvl==="ALARM") ? "#ef4444" : "#10b981" }}>
+                            {lvl === "ALARM" ? "🔥 FIRE" : "CLEAR"}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Actuators & Overrides */}
+                      <div className="act-panel">
+                        <div className="act-line">
+                          <span>🌀 <b>Exhaust Fan</b>: <b style={{ color: fanOn ? "#10b981" : "#94a3b8" }}>{fanOn ? "RUNNING" : "OFF"}</b></span>
+                          <div className="ctrl-pills">
+                            <button className={`ctrl-pill ${mFan === null ? "active" : ""}`} onClick={() => setActuatorManual("fan", idx, null)}>AUTO</button>
+                            <button className={`ctrl-pill ${mFan === 1 ? "on" : ""}`} onClick={() => setActuatorManual("fan", idx, 1)}>ON</button>
+                            <button className={`ctrl-pill ${mFan === 0 ? "off" : ""}`} onClick={() => setActuatorManual("fan", idx, 0)}>OFF</button>
+                          </div>
+                        </div>
+
+                        <div className="act-line">
+                          <span>💡 <b>6 Red LEDs (Pin 6)</b>: <b style={{ color: stripVal > 0 ? "#fbbf24" : "#94a3b8" }}>{ledModeStr}</b></span>
+                          <div className="ctrl-pills">
+                            <button className={`ctrl-pill ${mLed === null ? "active" : ""}`} onClick={() => setActuatorManual("led", idx, null)}>AUTO</button>
+                            <button className={`ctrl-pill ${mLed === 1 ? "on" : ""}`} onClick={() => setActuatorManual("led", idx, 1)}>SOLID</button>
+                            <button className={`ctrl-pill ${mLed === 3 ? "strobe" : ""}`} onClick={() => setActuatorManual("led", idx, 3)}>STROBE</button>
+                            <button className={`ctrl-pill ${mLed === 0 ? "off" : ""}`} onClick={() => setActuatorManual("led", idx, 0)}>OFF</button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Live Camera Feed Panel */}
+              <div className="card" style={{ marginTop: "1.25rem" }}>
+                <div className="card-header">
+                  <div className="card-title">
+                    <span>📹 Physical Model Overhead Camera Feed</span>
+                  </div>
+                  <span style={{ fontSize: "0.72rem", color: "#10b981" }}>● DROIDCAM HUD</span>
+                </div>
+                <div style={{ position: "relative", width: "100%", borderRadius: "8px", overflow: "hidden", background: "#000", minHeight: "180px" }}>
+                  <img
+                    src="/video_feed"
+                    alt="Physical Camera HUD"
+                    style={{ width: "100%", height: "auto", display: "block" }}
+                    onError={(e) => { e.target.style.display = 'none'; }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
