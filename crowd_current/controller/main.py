@@ -451,59 +451,82 @@ def status():
 threading.Thread(target=lambda: app.run("0.0.0.0", C.SERVER_PORT, threaded=True), daemon=True).start()
 
 
+def find_esp32_port():
+    try:
+        import serial.tools.list_ports
+        for p in serial.tools.list_ports.comports():
+            desc = (p.description or "").lower()
+            hwid = (p.hwid or "").lower()
+            if "cp210" in desc or "ch340" in desc or "usb serial" in desc or "10c4:ea60" in hwid or "1a86:7523" in hwid:
+                return p.device
+    except Exception:
+        pass
+    return None
+
 # ---------------- Serial link to the ESP32 Hub ----------------
 def serial_link(port):
     """ESP32 Hub over USB: parse 'T,...' telemetry lines, send 'C,...' command lines."""
     global telemetry
     import serial
-    print(f"[Serial] Connecting to ESP32 Hub on {port} @ 115200 baud...")
-    try:
-        ser = serial.Serial(port, 115200, timeout=0.2)
-    except Exception as e:
-        print(f"[Serial ERROR] Could not open {port}: {e}")
-        return
 
-    time.sleep(2.0)  # Wait for board reset after opening port
-    print(f"[Serial] Connected to {port} successfully.")
-    last_tx = 0.0
     while True:
+        ser = None
+        target_port = port or find_esp32_port()
+        if not target_port:
+            print("[Serial] Waiting for ESP32 Hub to be plugged in...")
+            time.sleep(2.0)
+            continue
+
+        print(f"[Serial] Connecting to ESP32 Hub on {target_port} @ 115200 baud...")
         try:
-            line = ser.readline().decode(errors="ignore").strip()
-            if line.startswith("T,"):
-                try:
-                    p = [int(x) for x in line.split(",")[1:]]
-                    rooms = [
-                        {
-                            "lvl": p[i * 5],
-                            "f": p[i * 5 + 1],
-                            "gr": p[i * 5 + 2] / 100.0,
-                            "t": p[i * 5 + 3],
-                            "h": p[i * 5 + 4],
-                        }
-                        for i in range(len(C.ROOMS))
-                    ]
+            ser = serial.Serial(target_port, 115200, timeout=0.2)
+            time.sleep(1.5)  # Wait for board reset after opening port
+            ser.reset_input_buffer()
+            print(f"[Serial] Connected to {target_port} successfully! Receiving telemetry...")
+            last_tx = 0.0
+            while True:
+                line = ser.readline().decode(errors="ignore").strip()
+                if line.startswith("T,"):
+                    try:
+                        p = [int(x) for x in line.split(",")[1:]]
+                        rooms = [
+                            {
+                                "lvl": p[i * 5],
+                                "f": p[i * 5 + 1],
+                                "gr": p[i * 5 + 2] / 100.0,
+                                "t": p[i * 5 + 3],
+                                "h": p[i * 5 + 4],
+                            }
+                            for i in range(len(C.ROOMS))
+                        ]
+                        with lock:
+                            telemetry = {"rooms": rooms, "rx": time.time()}
+                    except (ValueError, IndexError):
+                        pass
+                if time.time() - last_tx >= 0.5:
+                    last_tx = time.time()
                     with lock:
-                        telemetry = {"rooms": rooms, "rx": time.time()}
-                except (ValueError, IndexError):
-                    pass
-            if time.time() - last_tx >= 0.5:
-                last_tx = time.time()
-                with lock:
-                    c = commands
-                    rst = 1 if time.time() < reset_until else 0
-                    msg = "C,%s,%s,%s,%d\n" % (
-                        ",".join(map(str, c["s"])),
-                        ",".join(map(str, c["buz"])),
-                        ",".join(map(str, c["fan"])),
-                        rst,
-                    )
-                ser.write(msg.encode())
+                        c = commands
+                        rst = 1 if time.time() < reset_until else 0
+                        msg = "C,%s,%s,%s,%d\n" % (
+                            ",".join(map(str, c["s"])),
+                            ",".join(map(str, c["buz"])),
+                            ",".join(map(str, c["fan"])),
+                            rst,
+                        )
+                    ser.write(msg.encode())
         except Exception as e:
-            print(f"[Serial WARN] Communication error: {e}")
-            time.sleep(1.0)
+            print(f"[Serial WARN] COM port error on {target_port}: {e}")
+            print("Note: If Arduino Serial Monitor is open, please close it so Python can access the port.")
+            if ser:
+                try: ser.close()
+                except Exception: pass
+            time.sleep(2.0)
 
 
-if args.serial:
+# Start serial thread with given port or auto-detect
+serial_target = args.serial if args.serial else find_esp32_port()
+if serial_target or not args.sim:
     threading.Thread(target=serial_link, args=(args.serial,), daemon=True).start()
 
 
