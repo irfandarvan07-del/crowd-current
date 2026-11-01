@@ -38,4 +38,4 @@ CAMERA_SOURCE = 1
 FRAME_W = 960             # all processing is done at this width
 DIFF_THRESHOLD = 28       # grey-level change that counts as "something is on the floor"
 SMOOTH_FRAMES = 7         # median over this many frames
-SERVER_PORT = 5000
+SERVER_PORT = 8000
