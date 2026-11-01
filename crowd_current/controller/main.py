@@ -162,6 +162,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       </div>
     </div>
     <div style="display: flex; align-items: center; gap: 0.75rem;">
+      <div id="hub-badge" class="status-badge" style="background: rgba(16, 185, 129, 0.15); color: var(--green); border: 1px solid rgba(16, 185, 129, 0.4); font-size: 0.75rem;">⚡ ESP32: CONNECTED</div>
       <div id="mode-badge" class="status-badge badge-normal">NORMAL</div>
       <button class="btn-all-auto" onclick="setManual('all_auto')">⚡ ALL AUTO</button>
       <button class="btn-reset" onclick="sendAction('RESET')">↺ RESET ALARMS</button>
@@ -216,6 +217,16 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     }
 
     function updateUI(data) {
+      // 0. Hub Connection Badge
+      const hb = document.getElementById('hub-badge');
+      if (data.telemetry && (Date.now() / 1000 - data.telemetry.rx < 5)) {
+        hb.innerText = '⚡ ESP32: LIVE (COM3)';
+        hb.style.color = '#10b981';
+      } else {
+        hb.innerText = '⚠️ ESP32: OFFLINE';
+        hb.style.color = '#ef4444';
+      }
+
       // 1. Mode Badge
       const mb = document.getElementById('mode-badge');
       mb.innerText = data.mode;
@@ -244,9 +255,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         const telem = (data.telemetry && data.telemetry.rooms && data.telemetry.rooms[idx]) ? data.telemetry.rooms[idx] : null;
 
         const gas = telem ? telem.gr.toFixed(2) + 'x' : '--';
-        const temp = telem && telem.t >= 0 ? telem.t + ' °C' : '--';
-        const hum = telem && telem.h >= 0 ? telem.h + ' %' : '--';
-        const flame = telem ? (telem.fl ? '🔥 FLAME' : 'CLEAR') : '--';
+        const temp = telem && telem.t >= 0 ? telem.t + ' °C' : (telem ? 'Check D3' : '--');
+        const hum = telem && telem.h >= 0 ? telem.h + ' %' : (telem ? 'Check D3' : '--');
+        const flame = telem ? (telem.fl ? '🔥 FLAME' : (lvl === 'ALARM' ? '🔥 ALARM' : 'CLEAR')) : '--';
 
         const fanRunning = Boolean(data.fans && data.fans[idx]);
         const stripVal = data.strips ? data.strips[idx] : 0;
